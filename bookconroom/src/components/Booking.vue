@@ -3,8 +3,8 @@
     <!-- Header -->
     <header class="bg-white px-8 py-4 shadow-sm border-b">
       <div class="max-w-7xl mx-auto flex justify-between items-center">
-        <div class="logo-section">
-          <h2 class="text-lg font-semibold text-gray-900 m-0">ระบบจองห้องประชุม</h2>
+        <div>
+          <h2 class="text-lg font-semibold text-blue-600 m-0">ระบบจองห้องประชุม</h2>
           <p class="text-sm text-gray-600 m-0">Meeting Room Booking System</p>
         </div>
         <div class="flex flex-1 max-w-2xl mx-8">
@@ -13,16 +13,12 @@
             placeholder="ค้นหา..." 
             class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-l-full outline-none text-gray-900 focus:border-blue-500"
           >
-          <button class="bg-blue-500 text-white border-none px-4 py-2 rounded-r-full cursor-pointer hover:bg-blue-600 transition-colors">
+          <button class="bg-blue-600 text-white border-none px-4 py-2 rounded-r-full cursor-pointer hover:bg-blue-700 transition-colors">
             🔍
           </button>
         </div>
-        <div class="profile-section">
-          <img 
-            src="https://via.placeholder.com/40x40" 
-            alt="Profile" 
-            class="w-10 h-10 rounded-full border-2 border-gray-300"
-          >
+        <div>
+          <img src="https://via.placeholder.com/40x40" alt="Profile" class="w-10 h-10 rounded-full border-2 border-gray-300">
         </div>
       </div>
     </header>
@@ -31,30 +27,30 @@
       <!-- Sidebar -->
       <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
         <nav class="flex flex-col gap-2">
-          <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-700 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+          <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
             <span class="text-lg">🏠</span>
             หน้าแรก
-          </a>
-          <a href="#" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
-            <span class="text-lg">📅</span>
+          </router-link>
+          <router-link to="/booking" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
+            <span class="text-lg">🔒</span>
             จองห้องประชุม
-          </a>
-          <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-700 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">📋</span>
+          </router-link>
+          <router-link to="/booking-list" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+            <span class="text-lg">🅱️</span>
             รายการจองของฉัน
-          </a>
-          <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-700 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">🏢</span>
-            การจองไฟล์ห้องประชุม
-          </a>
-          <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-700 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">ℹ️</span>
+          </router-link>
+          <router-link to="/room-use" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+            <span class="text-lg">🗂️</span>
+            ตารางการใช้ห้องประชุม
+          </router-link>
+          <router-link to="/room-status" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+            <span class="text-lg">❗</span>
             สถานะห้องประชุม
-          </a>
-          <a href="#" class="flex items-center gap-3 px-4 py-3 text-gray-700 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+          </router-link>
+          <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
             <span class="text-lg">⚠️</span>
             แจ้งปัญหา
-          </a>
+          </router-link>
         </nav>
       </aside>
 
@@ -63,25 +59,23 @@
         <!-- Page Header -->
         <div class="mb-8">
           <div class="flex items-center gap-4">
-            <div class="bg-blue-500 text-white w-14 h-14 rounded-xl flex items-center justify-center text-2xl">
-              📅
+            <div class="bg-blue-600 text-white w-14 h-14 rounded-xl flex items-center justify-center text-2xl">
+              🔒
             </div>
             <div>
-              <h1 class="text-2xl font-semibold text-gray-900 m-0">จองห้องประชุม</h1>
+              <h1 class="text-2xl font-semibold text-blue-600 m-0">จองห้องประชุม</h1>
               <p class="text-gray-600 text-sm m-0">ระบบจองห้องประชุม</p>
             </div>
           </div>
         </div>
 
-        <!-- Booking Form -->
-        <div class="max-w-2xl">
-          <h2 class="text-xl font-semibold text-gray-900 mb-6">ข้อมูลจองห้อง</h2>
-          
+        <!-- Booking Form Card -->
+        <div class="bg-gray-50 rounded-xl p-8 max-w-xl">
+          <h2 class="text-xl font-semibold text-blue-600 mb-6">ข้อมูลผู้จอง</h2>
           <form @submit.prevent="submitBooking" class="space-y-6">
-            <!-- รหัสผู้จองผู้ใช้ -->
             <div>
               <label for="userId" class="block text-sm font-medium text-gray-700 mb-2">
-                รหัสผู้จองผู้ใช้ <span class="text-red-500">*</span>
+                กรอกรหัสผู้ใช้ <span class="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -92,8 +86,6 @@
                 required
               >
             </div>
-
-            <!-- ชื่อผู้จอง -->
             <div>
               <label for="bookerName" class="block text-sm font-medium text-gray-700 mb-2">
                 ชื่อผู้จอง <span class="text-red-500">*</span>
@@ -102,13 +94,11 @@
                 type="text"
                 id="bookerName"
                 v-model="formData.bookerName"
-                placeholder="ชื่อจริง"
+                placeholder="กรอกชื่อ"
                 class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                 required
               >
             </div>
-
-            <!-- นามสกุลผู้จอง -->
             <div>
               <label for="bookerSurname" class="block text-sm font-medium text-gray-700 mb-2">
                 นามสกุลผู้จอง <span class="text-red-500">*</span>
@@ -117,13 +107,11 @@
                 type="text"
                 id="bookerSurname"
                 v-model="formData.bookerSurname"
-                placeholder="นามสกุลจริง"
+                placeholder="กรอกนามสกุล"
                 class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                 required
               >
             </div>
-
-            <!-- เบอร์โทรศัพท์ -->
             <div>
               <label for="phoneNumber" class="block text-sm font-medium text-gray-700 mb-2">
                 เบอร์โทรศัพท์ <span class="text-red-500">*</span>
@@ -137,30 +125,27 @@
                 required
               >
             </div>
-
-            <!-- ตรวจอีเมล -->
             <div>
               <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
-                ตรวจอีเมล <span class="text-red-500">*</span>
+                กรอกอีเมล <span class="text-red-500">*</span>
               </label>
               <input
                 type="email"
                 id="email"
                 v-model="formData.email"
-                placeholder="ตรวจอีเมล"
+                placeholder="กรอกอีเมล"
                 class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                 required
               >
             </div>
-
             <!-- Submit Button -->
             <div class="flex justify-end pt-6">
               <button
                 type="submit"
-                class="bg-blue-500 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-600 transition-colors flex items-center gap-2"
+                class="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
               >
-                <span>✓</span>
-                ลิสต์
+                <span>✔️</span>
+                ถัดไป
               </button>
             </div>
           </form>
@@ -172,6 +157,9 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const formData = ref({
   userId: '',
@@ -184,6 +172,7 @@ const formData = ref({
 const submitBooking = () => {
   // Handle form submission
   console.log('Booking submitted:', formData.value)
-  // Add your booking logic here
+  // Navigate to BookingInfo page
+  router.push('/booking-info')
 }
 </script>
