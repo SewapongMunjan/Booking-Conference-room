@@ -29,6 +29,111 @@ async function isRoomTimeBlocked(roomId: number, start: Date, end: Date) {
 }
 
 /**
+ * GET /api/bookings/admin
+ * สำหรับแอดมิน: ดูรายการจองตามสถานะ
+ * Query:
+ *  - status: string | string[] (เช่น "AWAITING_ATTENDEE_CONFIRM,AWAITING_ADMIN_APPROVAL")
+ *  - start: ISOString (ออปชัน) — กรองช่วงเวลาเริ่มต้น
+ *  - end:   ISOString (ออปชัน) — กรองช่วงเวลาสิ้นสุด
+ *  - page:  number (ออปชัน, เริ่มที่ 1)
+ *  - pageSize: number (ออปชัน, ดีฟอลต์ 20)
+ */
+router.get("/admin", auth, requireAdmin, async (req, res) => {
+  try {
+    // 1) แปลงสถานะจาก query → เป็น enum[] ปลอดภัย
+    const raw = req.query.status as string | string[] | undefined;
+    const rawList = Array.isArray(raw)
+      ? raw
+      : typeof raw === "string"
+      ? raw.split(",").map((s) => s.trim())
+      : [];
+
+    // ดีฟอลต์ให้โชว์ที่ค้างอยู่ (รอผู้เข้าร่วม / รออนุมัติ)
+    const defaultStatuses: BookingStatus[] = [
+      BookingStatus.AWAITING_ATTENDEE_CONFIRM,
+      BookingStatus.AWAITING_ADMIN_APPROVAL,
+    ];
+
+    const allStatuses = Object.values(BookingStatus);
+    const statuses: BookingStatus[] =
+      rawList.length > 0
+        ? (rawList.filter((x) => allStatuses.includes(x as BookingStatus)) as BookingStatus[])
+        : defaultStatuses;
+
+    // 2) ตัวกรองช่วงเวลา (ออปชัน)
+    const { start, end } = req.query as { start?: string; end?: string };
+    const whereTime =
+      start && end
+        ? {
+            OR: [
+              { startTime: { gte: new Date(start), lt: new Date(end) } },
+              { endTime: { gt: new Date(start), lte: new Date(end) } },
+              {
+                AND: [
+                  { startTime: { lte: new Date(start) } },
+                  { endTime: { gte: new Date(end) } },
+                ],
+              },
+            ],
+          }
+        : {};
+
+    // 3) เพจจิเนชันแบบง่าย
+    const page = Math.max(parseInt((req.query.page as string) || "1", 10), 1);
+    const pageSize = Math.min(
+      Math.max(parseInt((req.query.pageSize as string) || "20", 10), 1),
+      100
+    );
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+
+    // 4) คิวรีข้อมูล
+    const [total, items] = await prisma.$transaction([
+      prisma.booking.count({
+        where: { status: { in: statuses }, ...whereTime },
+      }),
+      prisma.booking.findMany({
+        where: { status: { in: statuses }, ...whereTime },
+        orderBy: [{ startTime: "asc" }, { id: "asc" }],
+        skip,
+        take,
+        include: {
+          room: true,
+          bookedBy: { select: { id: true, fullName: true } },
+          requiredPositions: { include: { position: true } },
+          invites: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    // 5) สรุปจำนวนคำเชิญต่อสถานะ (ช่วยให้แอดมินประเมินความพร้อม)
+    const summarized = items.map((b) => {
+      const inviteStats = b.invites.reduce<Record<string, number>>((acc, inv) => {
+        acc[inv.status] = (acc[inv.status] || 0) + 1;
+        return acc;
+      }, {});
+      return { ...b, inviteStats };
+    });
+
+    return res.json({
+      page,
+      pageSize,
+      total,
+      statuses,
+      items: summarized,
+    });
+  } catch (e) {
+  console.error("Admin list bookings failed:", e); // ดู error ที่แท้จริง
+  return res.status(500).json({ error: "Internal Server Error" });
+}
+});
+
+/**
  * POST /api/bookings
  * body:
  * {
@@ -335,5 +440,44 @@ router.get("/", auth, async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+/** POST /api/bookings/:id/cancel — ยกเลิกการจอง */
+router.post("/:id/cancel", auth, async (req, res) => {
+  try {
+    const bookingId = Number(req.params.id);
+    const userId = req.user!.sub;
+
+    // ค้นหา booking
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+    // เงื่อนไขสิทธิ์: Admin ยกเลิกได้ทุกกรณี, ผู้จองยกเลิกได้ถ้ายังไม่ APPROVED
+    const isAdmin = req.user?.pos?.isAdmin ?? false;
+    if (booking.bookedById !== userId && !isAdmin) {
+      return res.status(403).json({ error: "Not allowed to cancel this booking" });
+    }
+
+    if (!isAdmin && booking.status === "APPROVED") {
+      return res.status(400).json({ error: "Cannot cancel an approved booking" });
+    }
+
+    // อัปเดตสถานะเป็น CANCELLED
+    const cancelled = await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: "CANCELLED" }, // ต้องมี enum CANCELLED ใน BookingStatus
+    });
+
+    // TODO: ถ้ามีระบบแจ้งเตือน → แจ้งผู้เข้าร่วมว่าถูกยกเลิกแล้ว
+
+    return res.json({ booking: cancelled, message: "Booking cancelled successfully" });
+  } catch (e) {
+    console.error("Cancel booking failed:", e);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
 
 export default router;
