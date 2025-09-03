@@ -1,0 +1,27 @@
+👤 admin (pos: Admin) → default password: Admin@123
+👤 mgr_it (pos: IT Manager) → default password: ITManager@123
+👤 mgr_ops (pos: Operations Manager) → default password: OperationsManager@123
+👤 mgr_sales (pos: Sales Manager) → default password: SalesManager@123
+👤 mgr_hr (pos: HR Manager) → default password: HRManager@123
+👤 mgr_fin (pos: Finance Manager) → default password: FinanceManager@123
+👤 it_support1 (pos: IT Support) → default password: ITSupport@123
+👤 sys_eng1 (pos: System Engineer) → default password: SystemEngineer@123
+👤 net_eng1 (pos: Network Engineer) → default password: NetworkEngineer@123
+👤 av_spec1 (pos: Audio-Visual Specialist) → default password: Audio-VisualSpecialist@123
+👤 ops1 (pos: Operations Staff) → default password: OperationsStaff@123
+👤 sales_exec1 (pos: Sales Executive) → default password: SalesExecutive@123
+👤 sales_coord1 (pos: Sales Coordinator) → default password: SalesCoordinator@123
+👤 hr_off1 (pos: HR Officer) → default password: HROfficer@123
+👤 acct1 (pos: Accountant) → default password: Accountant@123
+👤 fa1 (pos: Financial Analyst) → default password: FinancialAnalyst@123
+👤 hk_mgr (pos: Housekeeping Manager) → default password: HousekeepingManager@123
+👤 barista1 (pos: Barista) → default password: Barista@123
+👤 clean1 (pos: Cleaning Staff) → default password: CleaningStaff@123
+👤 logi1 (pos: Logistics Staff) → default password: LogisticsStaff@123
+👤 nt_mgr (pos: NoteTaking Manager) → default password: NoteTakingManager@123
+👤 note1 (pos: NoteTaker) → default password: NoteTaker@123
+👤 note2 (pos: NoteTaker) → default password: NoteTaker@123
+👤 note3 (pos: NoteTaker) → default password: NoteTaker@123
+👤 note4 (pos: NoteTaker) → default password: NoteTaker@123
+👤 note5 (pos: Backup NoteTaker) → default password: BackupNoteTaker@123
+👤 note6 (pos: Backup NoteTaker) → default password: BackupNoteTaker@123
