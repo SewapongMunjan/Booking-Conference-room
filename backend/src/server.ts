@@ -11,6 +11,8 @@ import { prisma } from "./prisma";
 // โหลด routers ที่เราสร้างไว้
 import authRouter from "./routes/auth";
 import roomsRouter from "./routes/rooms";
+import bookingsRouter from "./routes/bookings";
+
 
 
 const app = express();
@@ -54,7 +56,7 @@ app.get("/health", async (_req: Request, res: Response) => {
 // ====== Routes ======
 app.use("/api/auth", authRouter);
 app.use("/api/rooms", roomsRouter);
-// app.use("/api/bookings", bookingsRouter);
+app.use("/api/bookings", bookingsRouter);
 // app.use("/api/admin", adminRouter);
 // app.use("/api/notifications", notificationsRouter);
 
