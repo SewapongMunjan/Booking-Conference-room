@@ -17,8 +17,14 @@
             🔍
           </button>
         </div>
-        <div>
+        <div class="flex items-center gap-3">
           <img src="https://via.placeholder.com/40x40" alt="Profile" class="w-10 h-10 rounded-full border-2 border-gray-300">
+          <button
+            @click="logout"
+            class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+          >
+            ออกจากระบบ
+          </button>
         </div>
       </div>
     </header>
@@ -161,6 +167,14 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+const logout = () => {
+  localStorage.removeItem('token')
+  router.push('/login')
+}
 
 const currentTime = ref('')
 const currentDate = ref('')
