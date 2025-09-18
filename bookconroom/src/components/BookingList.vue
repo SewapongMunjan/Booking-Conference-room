@@ -23,9 +23,9 @@
       </div>
     </header>
 
-    <div class="flex justify-center py-8">
+    <div class="max-w-7xl mx-auto flex gap-6 p-6">
       <!-- Sidebar -->
-      <aside class="w-64 bg-white rounded-xl shadow-sm p-4 mr-8">
+      <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
         <nav class="flex flex-col gap-2">
           <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
             <span class="text-lg">🏠</span>
