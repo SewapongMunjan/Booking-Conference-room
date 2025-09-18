@@ -446,32 +446,51 @@ router.post("/:id/cancel", auth, async (req, res) => {
   try {
     const bookingId = Number(req.params.id);
     const userId = req.user!.sub;
+    const isAdmin = req.user?.pos?.isAdmin ?? false;
 
-    // ค้นหา booking
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-    });
+    const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
     if (!booking) return res.status(404).json({ error: "Booking not found" });
 
-    // เงื่อนไขสิทธิ์: Admin ยกเลิกได้ทุกกรณี, ผู้จองยกเลิกได้ถ้ายังไม่ APPROVED
-    const isAdmin = req.user?.pos?.isAdmin ?? false;
+    // สิทธิ์: ผู้จองยกเลิกได้ถ้ายังไม่ APPROVED, Admin ยกเลิกได้ทุกกรณี
     if (booking.bookedById !== userId && !isAdmin) {
       return res.status(403).json({ error: "Not allowed to cancel this booking" });
     }
-
     if (!isAdmin && booking.status === "APPROVED") {
       return res.status(400).json({ error: "Cannot cancel an approved booking" });
     }
+    if (booking.status === "CANCELLED") {
+      return res.json({ booking, message: "Already cancelled" });
+    }
 
-    // อัปเดตสถานะเป็น CANCELLED
-    const cancelled = await prisma.booking.update({
-      where: { id: bookingId },
-      data: { status: "CANCELLED" }, // ต้องมี enum CANCELLED ใน BookingStatus
+    const updated = await prisma.$transaction(async (tx) => {
+      // 1) ยกเลิก booking
+      const b = await tx.booking.update({
+        where: { id: bookingId },
+        data: { status: "CANCELLED" },
+      });
+
+      // 2) ปิดงานบริการที่ยังไม่จบ → REJECTED (เก็บ COMPLETED ไว้เป็นประวัติ)
+      await tx.bookingService.updateMany({
+        where: {
+          bookingId,
+          status: { in: ["PENDING", "IN_PROGRESS", "CONFIRMED"] },
+        },
+        data: { status: "REJECTED" },
+      });
+
+      // 3) (ออปชัน) ปิดคำเชิญที่ค้างอยู่ให้เป็น DECLINED เพื่อความชัดเจน
+      await tx.bookingInvite.updateMany({
+        where: {
+          bookingId,
+          status: { in: ["INVITED", "ACCEPTED"] },
+        },
+        data: { status: "DECLINED" },
+      });
+
+      return b;
     });
 
-    // TODO: ถ้ามีระบบแจ้งเตือน → แจ้งผู้เข้าร่วมว่าถูกยกเลิกแล้ว
-
-    return res.json({ booking: cancelled, message: "Booking cancelled successfully" });
+    return res.json({ booking: updated, message: "Booking cancelled and related services closed" });
   } catch (e) {
     console.error("Cancel booking failed:", e);
     return res.status(500).json({ error: "Internal Server Error" });
