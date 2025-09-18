@@ -28,6 +28,13 @@ async function isRoomTimeBlocked(roomId: number, start: Date, end: Date) {
   return overlapCount > 0;
 }
 
+function parseISOOrLocalToDate(input?: string) {
+  if (!input || typeof input !== "string") return null;
+  // new Date() รองรับทั้ง ISO (UTC) และ "YYYY-MM-DDTHH:mm" (local) จาก <input type="datetime-local">
+  const d = new Date(input);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 /**
  * POST /api/bookings
  * body:
@@ -47,7 +54,7 @@ router.post("/", auth, async (req, res) => {
       roomId,
       startTime,
       endTime,
-      agendaUrl, // eslint-disable-line @typescript-eslint/no-unused-vars
+      agendaUrl, // ไม่ใช้ใน schema แต่รับมาเผื่ออนาคต
       requiredPositionIds = [],
       serviceIds = [],
     } = req.body as {
@@ -59,25 +66,41 @@ router.post("/", auth, async (req, res) => {
       serviceIds?: number[];
     };
 
+    // === 1) ตรวจสอบค่าบังคับ ===
     if (!roomId || !startTime || !endTime) {
       return res.status(400).json({ error: "roomId, startTime, endTime are required" });
     }
 
+    // === 2) แปลงเวลาให้เป็น Date ===
     const s = new Date(startTime);
     const e = new Date(endTime);
-    if (isNaN(s.getTime()) || isNaN(e.getTime()) || s >= e) {
-      return res.status(400).json({ error: "Invalid startTime/endTime" });
+
+    // ตรวจว่าเวลา valid
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) {
+      return res.status(400).json({ error: "Invalid startTime or endTime" });
     }
 
+    // ✅ ไม่บังคับ 1 วันเต็ม แค่ตรวจว่า end > start
+    if (e <= s) {
+      return res.status(400).json({ error: "endTime must be later than startTime" });
+    }
+
+    // (option) กันไม่ให้จองย้อนหลัง
+    // if (s < new Date()) {
+    //   return res.status(400).json({ error: "Cannot book a room in the past" });
+    // }
+
+    // === 3) ตรวจว่าห้องมีอยู่จริง ===
     const room = await prisma.meetingRoom.findUnique({ where: { id: Number(roomId) } });
     if (!room) return res.status(404).json({ error: "Room not found" });
 
+    // === 4) ตรวจชนเวลา (back-to-back จองได้) ===
     if (await isRoomTimeBlocked(room.id, s, e)) {
       return res.status(409).json({ error: "Room is not available in the selected time range" });
     }
 
+    // === 5) สร้าง booking + record อื่น ๆ ===
     const result = await prisma.$transaction(async (tx) => {
-      // 1) สร้าง booking (ไม่มี title/agendaUrl/approvedAt ในสคีมาคุณ)
       const booking = await tx.booking.create({
         data: {
           roomId: room.id,
@@ -88,7 +111,7 @@ router.post("/", auth, async (req, res) => {
         },
       });
 
-      // 2) required positions
+      // Required positions
       if (requiredPositionIds.length > 0) {
         await tx.bookingRequiredPosition.createMany({
           data: requiredPositionIds.map((pid) => ({
@@ -99,7 +122,7 @@ router.post("/", auth, async (req, res) => {
         });
       }
 
-      // 3) services (ใช้ ServiceStatus.PENDING)
+      // Services
       if (serviceIds.length > 0) {
         await tx.bookingService.createMany({
           data: serviceIds.map((sid) => ({
@@ -111,7 +134,7 @@ router.post("/", auth, async (req, res) => {
         });
       }
 
-      // 4) เชิญผู้ที่อยู่ในตำแหน่งที่เลือกทั้งหมด → สถานะเชิญแรกคือ INVITED
+      // เชิญผู้ที่อยู่ในตำแหน่งที่เลือก
       if (requiredPositionIds.length > 0) {
         const attendees = await tx.user.findMany({
           where: { positionId: { in: requiredPositionIds.map(Number) } },
@@ -130,7 +153,7 @@ router.post("/", auth, async (req, res) => {
         }
       }
 
-      // 5) เลือก NoteTaker 2 คนจากคิว → ต้องใส่ roleIndex (0,1)
+      // เลือก NoteTaker 2 คนจากคิว
       const notetakers = await tx.noteTakerQueue.findMany({
         where: { isActive: true },
         orderBy: { orderNo: "asc" },
@@ -167,6 +190,7 @@ router.post("/", auth, async (req, res) => {
     return res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 /** GET /api/bookings/my — การจองของฉัน */
 router.get("/my", auth, async (req, res) => {

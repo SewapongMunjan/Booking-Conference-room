@@ -1,4 +1,4 @@
-import api from "@/lib/api";
+import api from "../lib/api";
 
 export async function listRooms() {
   const res = await api.get("/api/rooms");
