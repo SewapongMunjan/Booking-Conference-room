@@ -1,17 +1,16 @@
-// src/lib/api.js
 import axios from "axios";
 
-const api = axios.create({
-  // ใน Vite ต้องใช้ import.meta.env (ไม่ใช่ process.env)
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:3001",
-});
+// ใช้ Vite env หรือ fallback localhost:3001
+const baseURL = import.meta.env?.VITE_API_URL || "http://localhost:3001";
 
-// แนบ Bearer token อัตโนมัติทุกรอบ
+const api = axios.create({ baseURL });
+
+// แนบ Bearer token ทุกคำขอ
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("token") || localStorage.getItem("access_token");
   if (token) {
+    // อย่าเขียนทับ headers เดิม
     config.headers = config.headers || {};
-    // ใน JS ไม่ติด type error ของ Axios v1 เหมือน TS
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;

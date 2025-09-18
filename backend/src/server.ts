@@ -2,6 +2,8 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+
+
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 
@@ -12,6 +14,8 @@ import { prisma } from "./prisma";
 import authRouter from "./routes/auth";
 import roomsRouter from "./routes/rooms";
 import bookingsRouter from "./routes/bookings";
+import metaRoutes from "./routes/meta";
+
 
 
 
@@ -57,6 +61,7 @@ app.get("/health", async (_req: Request, res: Response) => {
 app.use("/api/auth", authRouter);
 app.use("/api/rooms", roomsRouter);
 app.use("/api/bookings", bookingsRouter);
+app.use("/api", metaRoutes);    
 // app.use("/api/admin", adminRouter);
 // app.use("/api/notifications", notificationsRouter);
 
