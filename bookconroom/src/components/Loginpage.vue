@@ -11,7 +11,7 @@
             <input
               v-model="username"
               type="text"
-              placeholder="เช่น 123XXXXX"
+              placeholder="เช่น admin หรือ it_support1"
               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               required
             />
@@ -30,10 +30,14 @@
 
           <button
             type="submit"
-            class="w-full bg-blue-700 hover:bg-blue-800 text-white font-medium py-3 rounded-lg transition-colors"
+            :disabled="loading"
+            class="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white font-medium py-3 rounded-lg transition-colors"
           >
-            เข้าสู่ระบบ
+            <span v-if="!loading">เข้าสู่ระบบ</span>
+            <span v-else>กำลังเข้าสู่ระบบ...</span>
           </button>
+
+          <p v-if="errorMsg" class="text-red-600 text-sm">{{ errorMsg }}</p>
         </form>
       </div>
     </div>
@@ -54,14 +58,41 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 const router = useRouter()
 const username = ref('')
 const password = ref('')
+const loading = ref(false)
+const errorMsg = ref('')
 
 const onLogin = async () => {
-  if (username.value && password.value) {
-    localStorage.setItem('token', 'demo') // set token
-    router.push('/home') // go to home page
+  errorMsg.value = ''
+  if (!username.value || !password.value) return
+
+  loading.value = true
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username.value, password: password.value })
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err?.error || 'เข้าสู่ระบบไม่สำเร็จ')
+    }
+
+    const data = await res.json()
+    // เก็บ token + user
+    localStorage.setItem('token', data.token)
+    localStorage.setItem('user', JSON.stringify(data.user))
+
+    // ไปหน้า home/rooms ตามที่มี
+    router.push('/home') // หรือ '/rooms'
+  } catch (e) {
+    errorMsg.value = e.message || 'เกิดข้อผิดพลาด'
+  } finally {
+    loading.value = false
   }
 }
 </script>
