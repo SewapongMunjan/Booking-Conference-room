@@ -90,7 +90,7 @@ const onLogin = async () => {
     // ไปหน้า home/rooms ตามที่มี
     router.push('/home') // หรือ '/rooms'
   } catch (e) {
-    errorMsg.value = e.message || 'เกิดข้อผิดพลาด'
+    errorMsg.value = e.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'
   } finally {
     loading.value = false
   }
