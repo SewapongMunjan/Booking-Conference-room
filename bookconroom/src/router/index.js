@@ -9,6 +9,7 @@ import RoomUse from '../components/RoomUse.vue'
 import BookingInfo from '../components/BookingInfo.vue'
 import BookCompleteInfo from '../components/BookCompleteInfo.vue'
 import AdminApprovals from '../components/AdminApprovals.vue'
+import MyInvites from '../components/MyInvites.vue';
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -22,6 +23,7 @@ const routes = [
   { path: '/booking-info', component: BookingInfo },
   { path: '/bookcompleteinfo', component: BookCompleteInfo },
   { path: '/admin/approvals', component: AdminApprovals, meta: { requiresAdmin: true } },
+  { path: '/my-invites', component: MyInvites },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 

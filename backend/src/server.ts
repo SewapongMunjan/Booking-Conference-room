@@ -15,6 +15,7 @@ import authRouter from "./routes/auth";
 import roomsRouter from "./routes/rooms";
 import bookingsRouter from "./routes/bookings";
 import metaRoutes from "./routes/meta";
+import invitesRouter from "./routes/invites";
 
 
 
@@ -62,6 +63,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/rooms", roomsRouter);
 app.use("/api/bookings", bookingsRouter);
 app.use("/api", metaRoutes);    
+app.use("/api/invites", invitesRouter);
 // app.use("/api/admin", adminRouter);
 // app.use("/api/notifications", notificationsRouter);
 
