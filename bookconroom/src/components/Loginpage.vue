@@ -57,42 +57,27 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import api from '@/lib/api.js'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 const router = useRouter()
 const username = ref('')
 const password = ref('')
-const loading = ref(false)
-const errorMsg = ref('')
 
 const onLogin = async () => {
-  errorMsg.value = ''
-  if (!username.value || !password.value) return
-
-  loading.value = true
   try {
-    const res = await fetch(`${API_BASE}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.value, password: password.value })
+    const { data } = await api.post('/api/auth/login', {
+      username: username.value,
+      password: password.value,
     })
+    // ✅ ต้องเป็น key เดียวกับที่ api.js ใช้
+    localStorage.setItem('access_token', data.token)
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err?.error || 'เข้าสู่ระบบไม่สำเร็จ')
-    }
+    // (ถ้ามีข้อมูล user) เก็บไว้ใช้ต่อ
+    if (data.user) localStorage.setItem('me', JSON.stringify(data.user))
 
-    const data = await res.json()
-    // เก็บ token + user
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('user', JSON.stringify(data.user))
-
-    // ไปหน้า home/rooms ตามที่มี
-    router.push('/home') // หรือ '/rooms'
+    router.push('/home')
   } catch (e) {
-    errorMsg.value = e.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'
-  } finally {
-    loading.value = false
+    alert(e?.response?.data?.error || 'เข้าสู่ระบบไม่สำเร็จ')
   }
 }
 </script>

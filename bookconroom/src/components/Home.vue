@@ -33,29 +33,26 @@
       <!-- Sidebar -->
       <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
         <nav class="flex flex-col gap-2">
-          <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
-            <span class="text-lg">🏠</span>
-            หน้าแรก
+          <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-200 transition-colors">
+            <span class="text-lg">🏠</span> หน้าแรก
           </router-link>
           <router-link to="/booking" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">📅</span>
-            จองห้องประชุม
+            <span class="text-lg">📅</span> จองห้องประชุม
           </router-link>
-          <router-link to="/booking-list" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">🅱️</span>
-            รายการจองของฉัน
+          <router-link to="/booking-list" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 font-medium">
+            <span class="text-lg">📋</span> รายการจองของฉัน
           </router-link>
           <router-link to="/room-use" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">🗂️</span>
-            ตารางการใช้ห้องประชุม
+            <span class="text-lg">🗂️</span> ตารางการใช้ห้องประชุม
           </router-link>
           <router-link to="/room-status" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">❗</span>
-            สถานะห้องประชุม
+            <span class="text-lg">ℹ️</span> สถานะห้องประชุม
           </router-link>
           <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">⚠️</span>
-            แจ้งปัญหา
+            <span class="text-lg">⚠️</span> แจ้งปัญหา
+          </router-link>
+          <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg font-medium">
+            <span class="text-lg">🛡️</span> อนุมัติการจอง (Admin)
           </router-link>
         </nav>
       </aside>
@@ -171,8 +168,9 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
-const logout = () => {
-  localStorage.removeItem('token')
+function logout() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('me_cache')
   router.push('/login')
 }
 

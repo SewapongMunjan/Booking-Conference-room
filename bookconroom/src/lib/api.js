@@ -1,19 +1,31 @@
-import axios from "axios";
+import axios, { AxiosHeaders } from 'axios'
 
-// ใช้ Vite env หรือ fallback localhost:3001
-const baseURL = import.meta.env?.VITE_API_URL || "http://localhost:3001";
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
+})
 
-const api = axios.create({ baseURL });
-
-// แนบ Bearer token ทุกคำขอ
+// attach token
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token") || localStorage.getItem("access_token");
-  if (token) {
-    // อย่าเขียนทับ headers เดิม
-    config.headers = config.headers || {};
-    config.headers.Authorization = `Bearer ${token}`;
+  const t = localStorage.getItem('access_token')
+  if (t) {
+    const h = new AxiosHeaders(config.headers || {})
+    h.set('Authorization', `Bearer ${t}`)
+    config.headers = h
   }
-  return config;
-});
+  return config
+})
 
-export default api;
+// auto logout on 401
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err?.response?.status === 401) {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('me_cache')
+      if (location.pathname !== '/login') location.href = '/login'
+    }
+    return Promise.reject(err)
+  }
+)
+
+export default api

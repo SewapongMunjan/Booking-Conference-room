@@ -83,7 +83,7 @@
         <!-- Room Status List -->
         <div class="bg-gray-50 rounded-xl p-8">
           <div class="grid grid-cols-2 gap-8">
-            <div v-for="(room, idx) in rooms" :key="room.id" class="flex items-center gap-8 py-8">
+            <div v-for="room in rooms" :key="room.id" class="flex items-center gap-8 py-8">
               <div>
                 <div class="text-sm text-blue-600 font-semibold mb-1">ห้องประชุม</div>
                 <div class="text-3xl font-bold text-gray-900 mb-1">{{ room.name }}</div>
