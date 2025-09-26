@@ -1,57 +1,80 @@
 <template>
   <div class="min-h-screen bg-gray-100">
+    <!-- Mobile Menu Button -->
+    <div class="lg:hidden bg-white px-4 py-3 shadow-sm border-b">
+      <button
+        @click="sidebarOpen = !sidebarOpen"
+        class="p-2 rounded-md text-gray-600 hover:bg-gray-100"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+    </div>
+
     <!-- Header -->
-    <header class="bg-white px-8 py-4 shadow-sm border-b">
+    <header class="bg-white px-4 lg:px-8 py-4 shadow-sm border-b">
       <div class="max-w-7xl mx-auto flex justify-between items-center">
         <div>
           <h2 class="text-lg font-semibold text-blue-600 m-0">ระบบจองห้องประชุม</h2>
           <p class="text-sm text-gray-600 m-0">Meeting Room Booking System</p>
         </div>
-        <div class="flex flex-1 max-w-2xl mx-8">
-          <input 
-            type="text" 
-            placeholder="ค้นหา..." 
-            class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-l-full outline-none text-gray-900 focus:border-blue-500"
-          >
-          <button class="bg-blue-600 text-white border-none px-4 py-2 rounded-r-full cursor-pointer hover:bg-blue-700 transition-colors">
-            🔍
-          </button>
-        </div>
-        <div>
-          <img src="https://via.placeholder.com/40x40" alt="Profile" class="w-10 h-10 rounded-full border-2 border-gray-300">
+        <div class="hidden lg:flex flex-1 max-w-2xl mx-8"></div>
+        <div class="flex items-center gap-3">
+          <button
+            @click="logout"
+            class="hidden lg:inline-block px-4 py-2 bg-gray-200 rounded-lg text-gray-700 hover:bg-gray-300 text-sm"
+          >ออกจากระบบ</button>
         </div>
       </div>
     </header>
 
-    <div class="max-w-7xl mx-auto flex gap-6 p-6">
+    <div class="flex">
+      <!-- Sidebar Overlay for Mobile -->
+      <div
+        v-if="sidebarOpen"
+        @click="sidebarOpen = false"
+        class="fixed inset-0 bg-black/50 z-20 lg:hidden"
+      ></div>
+
       <!-- Sidebar -->
-      <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
-        <nav class="flex flex-col gap-2">
-          <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">🏠</span>
-            หน้าแรก
-          </router-link>
-          <router-link to="/booking" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">🔒</span>
-            จองห้องประชุม
-          </router-link>
-          <router-link to="/booking-list" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">🅱️</span>
-            รายการจองของฉัน
-          </router-link>
-          <router-link to="/room-use" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">🗂️</span>
-            ตารางการใช้ห้องประชุม
-          </router-link>
-          <router-link to="/room-status" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">❗</span>
-            สถานะห้องประชุม
-          </router-link>
-          <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
-            <span class="text-lg">⚠️</span>
-            แจ้งปัญหา
-          </router-link>
-        </nav>
+      <aside
+        :class="[
+          'fixed lg:static inset-y-0 left-0 z-30 w-64 bg-white shadow-lg lg:shadow-sm transform transition-transform duration-300 lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        ]"
+      >
+        <div class="h-full flex flex-col">
+          <!-- Mobile close -->
+          <div class="lg:hidden p-4 border-b flex justify-between items-center">
+            <span class="font-semibold text-blue-600">เมนู</span>
+            <button @click="sidebarOpen = false" class="p-2 rounded-md hover:bg-gray-100 text-gray-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <!-- Nav -->
+            <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+              <router-link to="/" class="nav-link">🏠 <span>หน้าแรก</span></router-link>
+              <router-link to="/booking" class="nav-link">📅 <span>จองห้องประชุม</span></router-link>
+              <router-link to="/booking-list" class="nav-link">📋 <span>รายการจองของฉัน</span></router-link>
+              <router-link to="/room-use" class="nav-link">🗂️ <span>ตารางการใช้ห้อง</span></router-link>
+              <router-link to="/room-status" class="nav-link">ℹ️ <span>สถานะห้องประชุม</span></router-link>
+              <router-link to="/report" class="nav-link-active">⚠️ <span>แจ้งปัญหา</span></router-link>
+              <router-link to="/admin-approvals" class="nav-link">✅ <span>อนุมัติ</span></router-link>
+              <router-link to="/my-invites" class="nav-link">✉️ <span>คำเชิญ</span></router-link>
+            </nav>
+          <!-- Mobile logout -->
+          <div class="lg:hidden p-4 border-t">
+            <button
+              @click="logout"
+              class="w-full px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-sm"
+            >ออกจากระบบ</button>
+          </div>
+        </div>
       </aside>
 
       <!-- Main Content -->
@@ -125,3 +148,25 @@
     </div>
   </div>
 </template>
+
+<script setup>
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+
+const sidebarOpen = ref(false)
+const router = useRouter()
+
+function logout() {
+  localStorage.removeItem('token')
+  router.push('/login')
+}
+</script>
+
+<style scoped>
+.nav-link {
+  @apply flex items-center gap-3 px-4 py-3 rounded-lg text-blue-600 bg-blue-100 hover:bg-blue-200 transition;
+}
+.nav-link-active {
+  @apply flex items-center gap-3 px-4 py-3 rounded-lg text-white bg-blue-600 font-medium;
+}
+</style>
