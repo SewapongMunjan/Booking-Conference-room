@@ -57,16 +57,72 @@
             </button>
           </div>
           <!-- Nav -->
-            <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
-              <router-link to="/" class="nav-link">🏠 <span>หน้าแรก</span></router-link>
-              <router-link to="/booking" class="nav-link">📅 <span>จองห้องประชุม</span></router-link>
-              <router-link to="/booking-list" class="nav-link">📋 <span>รายการจองของฉัน</span></router-link>
-              <router-link to="/room-use" class="nav-link">🗂️ <span>ตารางการใช้ห้อง</span></router-link>
-              <router-link to="/room-status" class="nav-link">ℹ️ <span>สถานะห้องประชุม</span></router-link>
-              <router-link to="/report" class="nav-link-active">⚠️ <span>แจ้งปัญหา</span></router-link>
-              <router-link to="/admin-approvals" class="nav-link">✅ <span>อนุมัติ</span></router-link>
-              <router-link to="/my-invites" class="nav-link">✉️ <span>คำเชิญ</span></router-link>
-            </nav>
+          <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+            <router-link 
+              to="/" 
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium"
+            >
+              <span class="text-lg">🏠</span>
+              <span class="truncate">หน้าแรก</span>
+            </router-link>
+            <router-link 
+              to="/booking" 
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <span class="text-lg">📅</span>
+              <span class="truncate">จองห้องประชุม</span>
+            </router-link>
+            <router-link 
+              to="/booking-list" 
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <span class="text-lg">📋</span>
+              <span class="truncate">รายการจองของฉัน</span>
+            </router-link>
+            <router-link 
+              to="/room-use" 
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <span class="text-lg">🗂️</span>
+              <span class="truncate">ตารางการใช้ห้องประชุม</span>
+            </router-link>
+            <router-link 
+              to="/room-status" 
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <span class="text-lg">ℹ️</span>
+              <span class="truncate">สถานะห้องประชุม</span>
+            </router-link>
+            <router-link 
+              to="/report" 
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <span class="text-lg">⚠️</span>
+              <span class="truncate">แจ้งปัญหา</span>
+            </router-link>
+            <router-link 
+              to="/admin/approvals"
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <span class="text-lg">📅</span>
+              <span class="truncate">อนุมัติการจองห้อง</span>
+            </router-link>
+            <router-link 
+              to="/my-invites"
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <span class="text-lg">📅</span>
+              <span class="truncate">คำเชิญเข้าประชุมของฉัน</span>
+            </router-link>
+          </nav>
           <!-- Mobile logout -->
           <div class="lg:hidden p-4 border-t">
             <button

@@ -119,6 +119,22 @@
               <span class="text-lg">⚠️</span>
               <span class="truncate">แจ้งปัญหา</span>
             </router-link>
+            <router-link 
+              to="/admin/approvals"
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <span class="text-lg">📅</span>
+              <span class="truncate">อนุมัติการจองห้อง</span>
+            </router-link>
+            <router-link 
+              to="/my-invites"
+              @click="sidebarOpen = false"
+              class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <span class="text-lg">📅</span>
+              <span class="truncate">คำเชิญเข้าประชุมของฉัน</span>
+            </router-link>
           </nav>
 
           <!-- Mobile Logout Button -->
