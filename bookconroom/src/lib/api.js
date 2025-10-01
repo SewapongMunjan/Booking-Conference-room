@@ -1,31 +1,38 @@
-import axios, { AxiosHeaders } from 'axios'
+// src/lib/api.js
+import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
-})
+  baseURL: import.meta?.env?.VITE_API_BASE_URL || "http://localhost:3001",
+  withCredentials: false,
+});
 
 // attach token
 api.interceptors.request.use((config) => {
-  const t = localStorage.getItem('access_token')
-  if (t) {
-    const h = new AxiosHeaders(config.headers || {})
-    h.set('Authorization', `Bearer ${t}`)
-    config.headers = h
+  const token = localStorage.getItem("access_token");
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
   }
-  return config
-})
+  return config;
+});
 
-// auto logout on 401
+// global error handling
+let isRedirecting = false;
 api.interceptors.response.use(
-  (r) => r,
+  (res) => res,
   (err) => {
-    if (err?.response?.status === 401) {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('me_cache')
-      if (location.pathname !== '/login') location.href = '/login'
+    const status = err?.response?.status;
+    if ((status === 401 || status === 403) && !isRedirecting) {
+      isRedirecting = true;
+      // ล้าง token แล้วพาไปล็อกอิน
+      localStorage.removeItem("access_token");
+      // เก็บ path เดิมไว้ ถ้าอยากเด้งกลับหลังล็อกอินเสร็จ
+      const current = window.location.pathname + window.location.search;
+      sessionStorage.setItem("post_login_redirect", current);
+      window.location.href = "/login";
     }
-    return Promise.reject(err)
+    return Promise.reject(err);
   }
-)
+);
 
-export default api
+export default api;

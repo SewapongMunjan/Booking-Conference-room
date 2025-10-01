@@ -7,6 +7,8 @@
           <h2 class="text-lg font-semibold text-blue-600 m-0">ระบบจองห้องประชุม</h2>
           <p class="text-sm text-gray-600 m-0">Meeting Room Booking System</p>
         </div>
+
+        <!-- Search -->
         <div class="flex flex-1 max-w-2xl mx-8">
           <input
             v-model.trim="keyword"
@@ -16,13 +18,18 @@
           />
           <button
             class="bg-blue-600 text-white border-none px-4 py-2 rounded-r-full cursor-pointer hover:bg-blue-700 transition-colors"
-            @click="fetchMine"
+            @click="() => { page = 1; fetchMine() }"
           >
             🔍
           </button>
         </div>
+
         <div>
-          <img src="https://via.placeholder.com/40x40" alt="Profile" class="w-10 h-10 rounded-full border-2 border-gray-300" />
+          <img
+            src="https://via.placeholder.com/40x40"
+            alt="Profile"
+            class="w-10 h-10 rounded-full border-2 border-gray-300"
+          />
         </div>
       </div>
     </header>
@@ -49,11 +56,11 @@
           <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
             <span class="text-lg">⚠️</span> แจ้งปัญหา
           </router-link>
-          <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 font-medium">
+          <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg font-medium">
             <span class="text-lg">🛡️</span> อนุมัติการจอง (Admin)
           </router-link>
           <router-link to="/my-invites" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200">
-          <span class="text-lg">📨</span> คำเชิญของฉัน
+            <span class="text-lg">📨</span> คำเชิญของฉัน
           </router-link>
         </nav>
       </aside>
@@ -61,7 +68,7 @@
       <!-- Main Content -->
       <main class="flex-1 max-w-4xl bg-white rounded-xl shadow-sm p-8">
         <!-- Page Header -->
-        <div class="mb-8">
+        <div class="mb-6">
           <div class="flex items-center gap-4">
             <div class="bg-blue-600 text-white w-14 h-14 rounded-xl flex items-center justify-center text-2xl">
               📋
@@ -73,7 +80,7 @@
           </div>
         </div>
 
-        <!-- Filters + Status -->
+        <!-- Filters -->
         <div class="bg-white border rounded-xl p-4 mb-4 flex flex-wrap items-center gap-3">
           <label class="text-sm">
             สถานะ:
@@ -83,9 +90,20 @@
               </option>
             </select>
           </label>
+
+          <div class="flex items-center gap-2 text-sm">
+            จาก:
+            <input type="datetime-local" v-model="startLocal" class="border rounded px-2 py-1" />
+            ถึง:
+            <input type="datetime-local" v-model="endLocal" class="border rounded px-2 py-1" />
+            <button class="px-3 py-2 border rounded hover:bg-gray-50 text-sm" @click="applyDateFilter">กรองวันที่</button>
+            <button class="px-3 py-2 border rounded hover:bg-gray-50 text-sm" @click="clearDateFilter">ล้างช่วง</button>
+          </div>
+
           <span v-if="loading" class="text-sm text-gray-500">กำลังโหลด...</span>
           <span v-if="errorMsg" class="text-sm text-red-600">{{ errorMsg }}</span>
-          <button class="ml-auto px-3 py-2 border rounded hover:bg-gray-50 text-sm" @click="resetFilters">ล้างตัวกรอง</button>
+
+          <button class="ml-auto px-3 py-2 border rounded hover:bg-gray-50 text-sm" @click="resetFilters">ล้างตัวกรองทั้งหมด</button>
         </div>
 
         <!-- Booking List -->
@@ -121,14 +139,19 @@
                 <span class="text-xs text-gray-500" v-if="b.room?.capacity">ความจุ {{ b.room.capacity }} ที่นั่ง</span>
               </div>
 
-              
-              <!-- สถานะ -->
+              <!-- สรุปคำเชิญ (ถ้ามี) -->
+              <div v-if="b.inviteStats" class="text-xs text-gray-600">
+                <span v-if="b.inviteStats.invited > 0" class="px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+                  รอเชิญตอบ {{ b.inviteStats.invited }}
+                </span>
+              </div>
+
+              <!-- สถานะ + ปุ่ม -->
               <div class="flex items-center gap-3 ml-auto">
                 <span :class="['px-4 py-2 rounded-full font-semibold text-sm', badgeClass(b.status)]">
                   {{ statusTH(b.status) }}
                 </span>
 
-                <!-- ปุ่มยกเลิก -->
                 <button
                   v-if="b.status !== 'CANCELLED'"
                   class="px-3 py-2 text-sm rounded border border-red-300 text-red-600 hover:bg-red-50"
@@ -142,11 +165,11 @@
 
           <!-- Pagination -->
           <div class="mt-6 flex items-center gap-2">
-            <button class="px-3 py-1 border rounded" :disabled="page===1" @click="page--; fetchMine()">
+            <button class="px-3 py-1 border rounded" :disabled="page===1" @click="() => { page--; fetchMine() }">
               ← ก่อนหน้า
             </button>
             <span class="text-sm">หน้า {{ page }} / {{ totalPages }}</span>
-            <button class="px-3 py-1 border rounded" :disabled="page===totalPages" @click="page++; fetchMine()">
+            <button class="px-3 py-1 border rounded" :disabled="page===totalPages" @click="() => { page++; fetchMine() }">
               ถัดไป →
             </button>
           </div>
@@ -160,7 +183,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import api from '@/lib/api.js'
 
-/** ===== Dropdown สถานะ (label ไทย → value enum ที่ backend รับ) ===== */
+/** ตัวเลือกสถานะ */
 const statusOptions = [
   { label: 'ทั้งหมด', value: '' },
   { label: 'รอผู้เข้าร่วมยืนยัน', value: 'AWAITING_ATTENDEE_CONFIRM' },
@@ -169,6 +192,7 @@ const statusOptions = [
   { label: 'ยกเลิกแล้ว',         value: 'CANCELLED' },
 ]
 
+/** STATE */
 const status   = ref('')
 const keyword  = ref('')
 
@@ -176,16 +200,30 @@ const items    = ref([])
 const loading  = ref(false)
 const errorMsg = ref('')
 
-const page     = ref(1)
+let page     = ref(1)
 const pageSize = ref(10)
 const total    = ref(0)
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
-function toDay(iso)      { const d = new Date(iso); return String(d.getDate()) }
-function toMonthTH(iso)  { const d = new Date(iso); const m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']; return m[d.getMonth()] }
-function timeRange(s,e)  { const opt={hour:'2-digit',minute:'2-digit'}; return `${new Date(s).toLocaleTimeString([],opt)} - ${new Date(e).toLocaleTimeString([],opt)}` }
+/** ฟิลเตอร์ช่วงวันเวลา */
+const startLocal = ref('')
+const endLocal   = ref('')
+const startISO = computed(() => startLocal.value ? new Date(startLocal.value).toISOString() : '')
+const endISO   = computed(() => endLocal.value   ? new Date(endLocal.value).toISOString()   : '')
+
+/** Helpers แสดงผล */
+function toDay(iso){ const d = new Date(iso); return String(d.getDate()) }
+function toMonthTH(iso){
+  const d = new Date(iso)
+  const m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  return m[d.getMonth()]
+}
+function timeRange(s,e){
+  const opt = { hour: '2-digit', minute: '2-digit' }
+  return `${new Date(s).toLocaleTimeString([],opt)} - ${new Date(e).toLocaleTimeString([],opt)}`
+}
 function statusTH(s){
-  switch(s){
+  switch (s) {
     case 'AWAITING_ATTENDEE_CONFIRM': return 'รอผู้เข้าร่วมยืนยัน'
     case 'AWAITING_ADMIN_APPROVAL':   return 'รอผู้ดูแลอนุมัติ'
     case 'APPROVED':                  return 'อนุมัติแล้ว'
@@ -194,7 +232,7 @@ function statusTH(s){
   }
 }
 function badgeClass(s){
-  switch(s){
+  switch (s) {
     case 'AWAITING_ATTENDEE_CONFIRM': return 'bg-amber-200 text-amber-900'
     case 'AWAITING_ADMIN_APPROVAL':   return 'bg-blue-200 text-blue-900'
     case 'APPROVED':                  return 'bg-green-500 text-white'
@@ -203,45 +241,66 @@ function badgeClass(s){
   }
 }
 
-function resetFilters(){
-  status.value  = ''
-  keyword.value = ''
-  page.value    = 1
+/** ปุ่มฟิลเตอร์วันที่ */
+function applyDateFilter(){
+  page.value = 1
+  fetchMine()
+}
+function clearDateFilter(){
+  startLocal.value = ''
+  endLocal.value   = ''
+  page.value = 1
   fetchMine()
 }
 
-/** ===== โหลดรายการของฉัน ===== */
+/** รีเซ็ตทุกตัวกรอง */
+function resetFilters(){
+  status.value  = ''
+  keyword.value = ''
+  startLocal.value = ''
+  endLocal.value   = ''
+  page.value = 1
+  fetchMine()
+}
+
+/** โหลดรายการของฉัน */
 async function fetchMine(){
   loading.value = true
   errorMsg.value = ''
   try{
-    // params สำหรับ backend (กรองสถานะ + หน้าปัจจุบัน)
-    const params = { mine: 1, page: page.value, pageSize: pageSize.value }
-    if (status.value && String(status.value).trim() !== '') params.status = status.value
+    const params = {
+      mine: 1,
+      page: page.value,
+      pageSize: pageSize.value,
+      withInviteStats: 1, // ถ้า backend รองรับ จะได้ b.inviteStats กลับมาด้วย
+    }
+    if (status.value && String(status.value).trim() !== '') {
+      params.status = status.value
+    }
+    if (startISO.value && endISO.value) {
+      params.start = startISO.value
+      params.end   = endISO.value
+    }
 
     const { data } = await api.get('/api/bookings', { params })
     let serverList = Array.isArray(data?.items) ? data.items : []
 
-    // ถ้ามี keyword → กรองบน client
-    const hasKeyword = !!(keyword.value && keyword.value.trim())
-    if (hasKeyword){
+    // keyword filter ฝั่ง client
+    if (keyword.value?.trim()) {
       const k = keyword.value.trim().toLowerCase()
-      const filtered = serverList.filter(b =>
+      serverList = serverList.filter(b =>
         (b.room?.roomName || '').toLowerCase().includes(k)
       )
-
-      total.value = filtered.length
-      const maxPage = Math.max(1, Math.ceil(total.value / pageSize.value))
-      if (page.value > maxPage) page.value = maxPage
-
+      total.value = serverList.length
+      // slice ตามหน้า
       const start = (page.value - 1) * pageSize.value
       const end   = start + pageSize.value
-      items.value = filtered.slice(start, end)
+      items.value = serverList.slice(start, end)
     } else {
       items.value = serverList
       total.value = typeof data?.total === 'number' ? data.total : serverList.length
     }
-  } catch (e){
+  } catch (e) {
     console.error(e)
     errorMsg.value = e?.response?.data?.error || 'โหลดรายการไม่สำเร็จ'
     items.value = []
@@ -251,24 +310,21 @@ async function fetchMine(){
   }
 }
 
-/** ===== ยกเลิกการจอง ===== */
+/** ยกเลิกการจอง */
 async function cancelBooking(b){
   if (!confirm(`ยืนยันยกเลิกการจองห้อง ${b.room?.roomName || b.id}?`)) return
-  try{
+  try {
     await api.patch(`/api/bookings/${b.id}/cancel`)
     await fetchMine()
-  }catch(e){
+  } catch (e) {
     console.error(e)
     alert(e?.response?.data?.error || 'ยกเลิกไม่สำเร็จ')
   }
 }
 
+/** Lifecycle + Watchers */
 onMounted(fetchMine)
-
-// เมื่อเปลี่ยนสถานะ → รีเฟรชอัตโนมัติ
 watch(status, () => { page.value = 1; fetchMine() })
-
-// (ไม่บังคับ) พิมพ์คำค้นแล้ว Enter/ปุ่ม 🔍 ค่อยค้น; ถ้าอยากค้นทันที ให้ uncomment ด้านล่าง
-// watch(keyword, () => { page.value = 1; fetchMine() })
+// ถ้าอยากกรองทันทีเมื่อเปลี่ยนวันเวลา ให้เปิดอันนี้ได้ (ตอนนี้กดปุ่ม “กรองวันที่” แทน)
+// watch([startLocal, endLocal], () => { page.value = 1; fetchMine() })
 </script>
-

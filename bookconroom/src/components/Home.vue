@@ -1,33 +1,131 @@
 <template>
+  
   <div class="min-h-screen bg-gray-100">
     <!-- Header -->
     <header class="bg-white px-8 py-4 shadow-sm border-b">
-      <div class="max-w-7xl mx-auto flex justify-between items-center">
-        <div>
-          <h2 class="text-lg font-semibold text-blue-600 m-0">ระบบจองห้องประชุม</h2>
-          <p class="text-sm text-gray-600 m-0">Meeting Room Booking System</p>
-        </div>
-        <div class="flex flex-1 max-w-2xl mx-8">
-          <input 
-            type="text" 
-            placeholder="ค้นหา..." 
-            class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-l-full outline-none text-gray-900 focus:border-blue-500"
-          >
-          <button class="bg-blue-600 text-white border-none px-4 py-2 rounded-r-full cursor-pointer hover:bg-blue-700 transition-colors">
-            🔍
-          </button>
-        </div>
-        <div class="flex items-center gap-3">
-          <img src="https://via.placeholder.com/40x40" alt="Profile" class="w-10 h-10 rounded-full border-2 border-gray-300">
-          <button
-            @click="logout"
-            class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-          >
-            ออกจากระบบ
-          </button>
+  <div class="max-w-7xl mx-auto flex justify-between items-center">
+    <!-- Left -->
+    <div>
+      <h2 class="text-lg font-semibold text-blue-600 m-0">ระบบจองห้องประชุม</h2>
+      <p class="text-sm text-gray-600 m-0">Meeting Room Booking System</p>
+    </div>
+
+    <!-- Search -->
+    <div class="flex flex-1 max-w-2xl mx-8">
+      <input
+        v-model.trim="keyword"
+        type="text"
+        placeholder="ค้นหา..."
+        class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-l-full outline-none text-gray-900 focus:border-blue-500"
+      >
+      <button
+        class="bg-blue-600 text-white border-none px-4 py-2 rounded-r-full cursor-pointer hover:bg-blue-700 transition-colors"
+        @click="onSearch"
+      >
+        🔍
+      </button>
+    </div>
+
+    <!-- Right -->
+    <div class="flex items-center gap-3 relative">
+      <!-- Notifications -->
+      <div class="relative">
+        <button
+          data-noti-bell
+  class="w-10 h-10 rounded-full flex items-center justify-center border hover:bg-gray-50 relative"
+  @click="toggleNotif"
+> 🔔
+  <span v-if="unreadCount > 0" class="absolute -top-1 -right-1 ...">
+    {{ unreadCount > 9 ? '9+' : unreadCount }}
+  </span>
+</button>
+
+        <!-- Dropdown -->
+       <div
+  v-if="showNotif"
+  data-noti-dropdown                     
+  class="absolute right-0 mt-2 w-80 bg-white border rounded-xl shadow-lg z-50"
+>
+          <div class="p-3 border-b flex items-center gap-2">
+            <span class="font-medium">การแจ้งเตือน</span>
+            <span class="ml-auto text-xs text-gray-500">ยังไม่อ่าน: {{ unreadCount }}</span>
+          </div>
+
+          <div class="max-h-80 overflow-auto">
+            <div v-if="loadingNoti" class="p-4 text-sm text-gray-500">กำลังโหลด...</div>
+            <div v-else-if="errorNoti" class="p-4 text-sm text-red-600">{{ errorNoti }}</div>
+
+            <template v-else>
+              <div
+                v-if="notifs.length === 0"
+                class="p-4 text-sm text-gray-500"
+              >
+                ยังไม่มีการแจ้งเตือน
+              </div>
+
+              <div v-else class="divide-y">
+                <div
+                  v-for="n in notifs"
+                  :key="n.id"
+                  class="p-3 hover:bg-gray-50 flex items-start gap-3"
+                >
+                  <div class="text-xl leading-none">📣</div>
+                  <div class="flex-1">
+                    <div class="text-sm" :class="n.isRead ? 'text-gray-600' : 'text-gray-900 font-medium'">
+                      {{ n.message }}
+                    </div>
+                    <div class="text-[11px] text-gray-500 mt-1">
+                      {{ formatTime(n.createdAt) }}
+                    </div>
+                  </div>
+                  <button
+                    v-if="!n.isRead"
+                    class="text-xs px-2 py-1 border rounded hover:bg-gray-50"
+                    @click.stop="markAsRead(n)"
+                    title="ทำเครื่องหมายว่าอ่านแล้ว"
+                  >
+                    อ่านแล้ว
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div class="p-3 border-t flex items-center gap-2">
+            <button
+              class="text-sm px-3 py-2 border rounded hover:bg-gray-50"
+              @click="refreshNotif"
+            >
+              รีเฟรช
+            </button>
+            <button
+              class="text-sm px-3 py-2 border rounded hover:bg-gray-50"
+              @click="markAllAsRead"
+              :disabled="unreadCount===0"
+            >
+              ทำเครื่องหมายทั้งหมดว่าอ่านแล้ว
+            </button>
+            <button
+              class="ml-auto text-sm px-3 py-2 border rounded hover:bg-gray-50"
+              @click="showNotif=false"
+            >
+              ปิด
+            </button>
+          </div>
         </div>
       </div>
-    </header>
+
+      <!-- Avatar + Logout -->
+      <img :src="me?.avatarUrl || 'https://via.placeholder.com/40x40'" alt="Profile" class="w-10 h-10 rounded-full border-2 border-gray-300">
+      <button
+        @click="logout"
+        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+      >
+        ออกจากระบบ
+      </button>
+    </div>
+  </div>
+</header>
 
     <div class="max-w-7xl mx-auto flex gap-6 p-6">
       <!-- Sidebar -->
@@ -51,7 +149,7 @@
           <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
             <span class="text-lg">⚠️</span> แจ้งปัญหา
           </router-link>
-          <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg font-medium">
+          <router-link v-if="isAdmin" to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 hover:bg-blue-200 rounded-lg font-medium">
             <span class="text-lg">🛡️</span> อนุมัติการจอง (Admin)
           </router-link>
           <router-link to="/my-invites" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200">
@@ -166,37 +264,49 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import api from '@/lib/api.js'
 
+/* ===== auth / logout ===== */
+const { isAdmin } = useAuth()
 const router = useRouter()
 
-function logout() {
+function logout () {
   localStorage.removeItem('access_token')
   localStorage.removeItem('me_cache')
   router.push('/login')
 }
 
-const currentTime = ref('')
-const currentDate = ref('')
+/* ===== ค้นหา ===== */
+const keyword = ref('')
+function onSearch () {
+  const q = keyword.value.trim()
+  if (!q) return
+  router.push({ path: '/search', query: { q } })
+  keyword.value = ''
+}
+
+/* ===== เวลา + ปฏิทิน ===== */
+const currentTime  = ref('')
+const currentDate  = ref('')
 const currentMonth = ref('')
-const currentYear = ref('')
+const currentYear  = ref('')
 
 const thaiMonths = [
-  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+  'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+  'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
 ]
 
 const updateDateTime = () => {
   const now = new Date()
-  currentTime.value = now.toLocaleTimeString('th-TH', { 
-    hour: '2-digit', 
-    minute: '2-digit', 
-    second: '2-digit' 
+  currentTime.value = now.toLocaleTimeString('th-TH', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
   })
   currentDate.value = now.getDate()
   currentMonth.value = thaiMonths[now.getMonth()]
-  currentYear.value = now.getFullYear() + 543 // Buddhist Era
+  currentYear.value = now.getFullYear() + 543 // พ.ศ.
 }
 
 const calendarDates = computed(() => {
@@ -204,57 +314,130 @@ const calendarDates = computed(() => {
   const year = now.getFullYear()
   const month = now.getMonth()
   const today = now.getDate()
-  
-  // First day of current month
+
   const firstDay = new Date(year, month, 1)
-  const startDate = firstDay.getDay() // 0 = Sunday
-  
-  // Last day of current month
+  const startDate = firstDay.getDay() // 0=Sun
   const lastDay = new Date(year, month + 1, 0).getDate()
-  
-  // Previous month's last days
   const prevMonth = new Date(year, month, 0).getDate()
-  
+
   const dates = []
   let key = 0
-  
-  // Previous month dates
   for (let i = startDate - 1; i >= 0; i--) {
-    dates.push({
-      date: prevMonth - i,
-      isToday: false,
-      isOtherMonth: true,
-      key: key++
-    })
+    dates.push({ date: prevMonth - i, isToday: false, isOtherMonth: true, key: key++ })
   }
-  
-  // Current month dates
-  for (let date = 1; date <= lastDay; date++) {
-    dates.push({
-      date: date,
-      isToday: date === today,
-      isOtherMonth: false,
-      key: key++
-    })
+  for (let d = 1; d <= lastDay; d++) {
+    dates.push({ date: d, isToday: d === today, isOtherMonth: false, key: key++ })
   }
-  
-  // Next month dates to fill the grid
-  const remainingCells = 42 - dates.length // 6 rows × 7 days
-  for (let date = 1; date <= remainingCells; date++) {
-    dates.push({
-      date: date,
-      isToday: false,
-      isOtherMonth: true,
-      key: key++
-    })
+  const remain = 42 - dates.length
+  for (let d = 1; d <= remain; d++) {
+    dates.push({ date: d, isToday: false, isOtherMonth: true, key: key++ })
   }
-  
   return dates.slice(0, 42)
 })
 
-onMounted(() => {
+/* ===== แจ้งเตือน (กระดิ่ง) ===== */
+const me = ref(null)
+async function fetchMe () {
+  try {
+    const { data } = await api.get('/api/auth/me')
+    me.value = data
+  } catch { me.value = null }
+}
+
+// ชื่อ state ให้ตรงกับ template
+const showNotif   = ref(false)
+const notifs      = ref([])      // [{id,message,isRead,createdAt}]
+const loadingNoti = ref(false)
+const errorNoti   = ref('')
+
+const unreadCount = computed(() => notifs.value.filter(n => !n.isRead).length)
+
+function formatTime (iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+  if (diff < 60) return `${diff}s ที่แล้ว`
+  const m = Math.floor(diff / 60)
+  if (m < 60) return `${m}m ที่แล้ว`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ที่แล้ว`
+  const days = Math.floor(h / 24)
+  return `${days}d ที่แล้ว`
+}
+
+async function fetchNotifications () {
+  loadingNoti.value = true
+  errorNoti.value = ''
+  try {
+    const { data } = await api.get('/api/notifications')
+    const list = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
+    notifs.value = list.map(n => ({
+      id: n.id,
+      message: n.message,
+      isRead: !!n.isRead,
+      createdAt: n.createdAt
+    }))
+  } catch (e) {
+    errorNoti.value = e?.response?.data?.error || 'โหลดการแจ้งเตือนไม่สำเร็จ'
+    notifs.value = []
+  } finally {
+    loadingNoti.value = false
+  }
+}
+
+async function markAsRead (n) {
+  if (n.isRead) return
+  try {
+    await api.patch(`/api/notifications/${n.id}/read`)
+    n.isRead = true
+  } catch {}
+}
+
+async function markAllAsRead () {
+  if (!unreadCount.value) return
+  try {
+    await api.patch('/api/notifications/read-all')
+    notifs.value = notifs.value.map(n => ({ ...n, isRead: true }))
+  } catch {}
+}
+
+async function refreshNotif () {
+  await fetchNotifications()
+}
+
+function toggleNotif () {
+  showNotif.value = !showNotif.value
+}
+
+// ปิด dropdown เมื่อคลิกนอก
+function handleClickOutside (e) {
+  const dropdown = document.querySelector('[data-noti-dropdown]')
+  const bellBtn  = document.querySelector('[data-noti-bell]')
+  if (!dropdown) { showNotif.value = false; return }
+  if (!dropdown.contains(e.target) && !(bellBtn && bellBtn.contains(e.target))) {
+    showNotif.value = false
+  }
+}
+
+/* ===== lifecycle ===== */
+let clockTimer = null
+let notiTimer  = null
+
+onMounted(async () => {
   updateDateTime()
-  setInterval(updateDateTime, 1000)
+  clockTimer = setInterval(updateDateTime, 1000)
+
+  await fetchMe()
+  await fetchNotifications()
+  notiTimer = setInterval(fetchNotifications, 30000) // รีเฟรชทุก 30 วิ
+
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
+  if (notiTimer)  clearInterval(notiTimer)
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 

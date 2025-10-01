@@ -16,7 +16,8 @@ import roomsRouter from "./routes/rooms";
 import bookingsRouter from "./routes/bookings";
 import metaRoutes from "./routes/meta";
 import invitesRouter from "./routes/invites";
-
+import notetakersRouter from "./routes/notetakers";
+import notificationsRouter from "./routes/notifications";
 
 
 
@@ -64,8 +65,9 @@ app.use("/api/rooms", roomsRouter);
 app.use("/api/bookings", bookingsRouter);
 app.use("/api", metaRoutes);    
 app.use("/api/invites", invitesRouter);
-// app.use("/api/admin", adminRouter);
-// app.use("/api/notifications", notificationsRouter);
+app.use("/api/notetakers", notetakersRouter);
+app.use("/api/notifications", notificationsRouter);
+
 
 // ====== 404 ======
 app.use((_req: Request, res: Response) => {

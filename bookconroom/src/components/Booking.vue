@@ -1,18 +1,20 @@
 <template>
   <div class="min-h-screen bg-gray-100">
+    <!-- Header -->
     <header class="bg-white px-8 py-4 shadow-sm border-b">
       <div class="max-w-7xl mx-auto flex justify-between items-center">
         <div>
           <h2 class="text-lg font-semibold text-blue-600 m-0">ระบบจองห้องประชุม</h2>
           <p class="text-sm text-gray-600 m-0">Meeting Room Booking System</p>
         </div>
-        <div>
-          <img :src="me?.avatarUrl || 'https://via.placeholder.com/40x40'" class="w-10 h-10 rounded-full border-2">
+        <div class="flex items-center gap-3">
+          <img :src="me?.avatarUrl || 'https://via.placeholder.com/40x40'" class="w-10 h-10 rounded-full border-2" />
         </div>
       </div>
     </header>
 
     <div class="max-w-7xl mx-auto flex gap-6 p-6">
+      <!-- Sidebar -->
       <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
         <nav class="flex flex-col gap-2">
           <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
@@ -37,11 +39,12 @@
             <span class="text-lg">🛡️</span> อนุมัติการจอง (Admin)
           </router-link>
           <router-link to="/my-invites" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200">
-          <span class="text-lg">📨</span> คำเชิญของฉัน
+            <span class="text-lg">📨</span> คำเชิญของฉัน
           </router-link>
         </nav>
       </aside>
 
+      <!-- Main -->
       <main class="flex-1 bg-white rounded-xl shadow-sm p-8">
         <div class="mb-8">
           <div class="flex items-center gap-4">
@@ -57,6 +60,7 @@
         <div v-if="errorMsg" class="mb-6 p-4 rounded-lg bg-red-50 text-red-700 border">{{ errorMsg }}</div>
         <div v-if="successMsg" class="mb-6 p-4 rounded-lg bg-green-50 text-green-700 border">{{ successMsg }}</div>
 
+        <!-- Form -->
         <div class="bg-gray-50 rounded-xl p-8 max-w-3xl">
           <form @submit.prevent="submitBooking" class="space-y-6" novalidate>
             <!-- Room -->
@@ -65,7 +69,7 @@
               <select v-model.number="form.roomId" class="w-full px-4 py-3 border rounded-lg">
                 <option :value="null" disabled>-- เลือกห้อง --</option>
                 <option v-for="r in rooms" :key="r.id" :value="r.id">
-                  {{ r.roomName }} ({{ r.capacity }} ที่นั่ง) - {{ r.status }}
+                  {{ r.roomName }}<span v-if="r.capacity"> ({{ r.capacity }} ที่นั่ง)</span> - {{ r.status }}
                 </option>
               </select>
             </div>
@@ -85,7 +89,7 @@
               </div>
             </div>
 
-            <!-- Required Positions (checkbox) -->
+            <!-- Required Positions -->
             <div>
               <div class="flex items-center justify-between">
                 <label class="block text-sm font-medium mb-2">ตำแหน่งที่ต้องเข้าประชุม</label>
@@ -100,13 +104,12 @@
                   <span>{{ p.name }}</span>
                   <span v-if="p.department" class="text-xs text-gray-500">· {{ p.department.name }}</span>
                   <span v-if="p.isNoteTaker" class="text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded">Note</span>
-                  <span v-if="p.isAdmin" class="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded">Admin</span>
                 </label>
               </div>
               <p v-else class="text-sm text-gray-500">ไม่มีข้อมูลตำแหน่ง</p>
             </div>
 
-            <!-- Services (checkbox) -->
+            <!-- Services -->
             <div>
               <div class="flex items-center justify-between">
                 <label class="block text-sm font-medium mb-2">อุปกรณ์/บริการที่ต้องการ</label>
@@ -133,14 +136,31 @@
             </div>
 
             <div class="flex justify-end pt-2">
-              <button type="submit" :disabled="submitting || !canSubmit"
-                      class="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-60">
+              <button
+                type="submit"
+                :disabled="submitting || !canSubmit"
+                class="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
+              >
                 {{ submitting ? "กำลังจอง..." : "ยืนยันการจอง" }}
               </button>
             </div>
           </form>
         </div>
 
+        <!-- Room schedule of selected day -->
+        <div v-if="roomSchedule.length" class="bg-white rounded-xl p-6 mt-8 border">
+          <h3 class="font-semibold mb-3">
+            ตารางการใช้ห้อง {{ currentRoomName }} ({{ selectedDayLabel }})
+          </h3>
+          <ul class="list-disc pl-6">
+            <li v-for="b in roomSchedule" :key="b.id">
+              {{ fmtTime(b.startTime) }} - {{ fmtTime(b.endTime) }}
+              <span class="text-xs text-gray-500">· {{ b.status }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Debug (optional) -->
         <pre class="mt-6 text-xs text-gray-500 bg-gray-50 p-4 rounded">{{ debugPayload }}</pre>
       </main>
     </div>
@@ -151,11 +171,13 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import api from '@/lib/api.js'
 
-const me = ref(null)
-const rooms = ref([])
+/* ---------- state ---------- */
+const me        = ref(null)
+const rooms     = ref([])
 const positions = ref([])
-const services = ref([])
-const errorMsg = ref('')
+const services  = ref([])
+
+const errorMsg   = ref('')
 const successMsg = ref('')
 const submitting = ref(false)
 
@@ -168,11 +190,12 @@ const form = ref({
   agendaUrl: ''
 })
 
-function toISOFromLocal(dtLocal) {
+/* ---------- helpers: datetime ---------- */
+function toISOFromLocal (dtLocal) {
   if (!dtLocal || typeof dtLocal !== 'string' || !dtLocal.includes('T')) return ''
   const [datePart, timePart] = dtLocal.split('T')
   const [y, m, d] = datePart.split('-').map(Number)
-  const [hh, mm] = timePart.split(':').map(Number)
+  const [hh, mm]  = timePart.split(':').map(Number)
   const local = new Date(y, (m||1)-1, d||1, hh||0, mm||0, 0, 0)
   if (isNaN(local.getTime())) return ''
   return local.toISOString()
@@ -185,31 +208,22 @@ const endTs    = computed(() => Date.parse(endISO.value || ''))
 const durationOk = computed(() => !!form.value.startLocal && !!form.value.endLocal && endTs.value > startTs.value)
 const canSubmit  = computed(() => !!form.value.roomId && durationOk.value)
 
-const debugPayload = computed(() => JSON.stringify({
-  roomId: Number(form.value.roomId || 0),
-  startTime: startISO.value,
-  endTime: endISO.value,
-  requiredPositionIds: form.value.requiredPositionIds,
-  serviceIds: form.value.serviceIds,
-  agendaUrl: form.value.agendaUrl || undefined
-}, null, 2))
-
 const endMinLocal = ref('')
 watch(() => form.value.startLocal, val => {
   if (!val) { endMinLocal.value = ''; return }
   const [datePart, timePart] = val.split('T')
   const [y, m, d] = datePart.split('-').map(Number)
-  const [hh, mm] = timePart.split(':').map(Number)
+  const [hh, mm]  = timePart.split(':').map(Number)
   const dt = new Date(y, (m||1)-1, d||1, hh||0, (mm||0)+1, 0, 0)
-  const pad = n => String(n).padStart(2,'0')
+  const pad = n => String(n).padStart(2, '0')
   endMinLocal.value = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`
 })
 
-function onStartBlur() {
+function onStartBlur () {
   if (form.value.startLocal && !form.value.endLocal) {
     const [datePart, timePart] = form.value.startLocal.split('T')
     const [y, m, d] = datePart.split('-').map(Number)
-    const [hh, mm] = timePart.split(':').map(Number)
+    const [hh, mm]  = timePart.split(':').map(Number)
     const dt = new Date(y, (m||1)-1, d||1, hh||0, mm||0, 0, 0)
     dt.setHours(dt.getHours() + 1)
     const pad = n => String(n).padStart(2,'0')
@@ -217,29 +231,107 @@ function onStartBlur() {
   }
 }
 
-// Select/Clear helpers
-function selectAllPositions() { form.value.requiredPositionIds = positions.value.map(p => p.id) }
-function clearPositions() { form.value.requiredPositionIds = [] }
-function selectAllServices() { form.value.serviceIds = services.value.map(s => s.id) }
-function clearServices() { form.value.serviceIds = [] }
+/* ---------- select/clear helpers ---------- */
+function selectAllPositions () { form.value.requiredPositionIds = positions.value.map(p => p.id) }
+function clearPositions ()     { form.value.requiredPositionIds = [] }
+function selectAllServices ()  { form.value.serviceIds = services.value.map(s => s.id) }
+function clearServices ()      { form.value.serviceIds = [] }
 
-// API
-async function fetchRooms() {
+/* ---------- schedule (room bookings of the day) ---------- */
+const roomSchedule = ref([])
+
+function fmtTime (iso) {
+  try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+  catch { return '-' }
+}
+const currentRoomName = computed(() => rooms.value.find(r => r.id === form.value.roomId)?.roomName || '')
+const selectedDayLabel = computed(() => {
+  if (!form.value.startLocal) return ''
+  const d = new Date(form.value.startLocal)
+  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()+543}`
+})
+
+function dayStartISO (localStr) {
+  const d = new Date(localStr)
+  if (isNaN(d.getTime())) return ''
+  d.setHours(0,0,0,0)
+  return d.toISOString()
+}
+function dayEndISO (localStr) {
+  const d = new Date(localStr)
+  if (isNaN(d.getTime())) return ''
+  d.setHours(23,59,59,999)
+  return d.toISOString()
+}
+
+async function fetchRoomSchedule () {
+  roomSchedule.value = []
+  if (!form.value.roomId || !form.value.startLocal) return
+  try {
+    const params = {
+      roomId: form.value.roomId,
+      start: dayStartISO(form.value.startLocal),
+      end:   dayEndISO(form.value.startLocal),
+      page: 1, pageSize: 200
+    }
+    const { data } = await api.get('/api/bookings', { params })
+    roomSchedule.value = Array.isArray(data?.items) ? data.items : []
+  } catch {
+    roomSchedule.value = []
+  }
+}
+
+function overlaps (aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && bStart < aEnd
+}
+
+/* ---------- API ---------- */
+async function fetchMe () {
+  try {
+    const { data } = await api.get('/api/auth/me')
+    me.value = data
+  } catch { me.value = null }
+}
+
+async function fetchRooms () {
   const { data } = await api.get('/api/rooms')
-  rooms.value = data
-}
-async function fetchPositions() {
-  const { data } = await api.get('/api/positions') // new endpoint
-  positions.value = data
-}
-async function fetchServices() {
-  const { data } = await api.get('/api/services') // new endpoint
-  services.value = data
+  rooms.value = Array.isArray(data) ? data : []
 }
 
-async function submitBooking() {
-  errorMsg.value = ''; successMsg.value = ''
+// ดึงตำแหน่ง (ตัด Admin ออก + เรียงตาม id)
+async function fetchPositions () {
+  try {
+    const { data } = await api.get('/api/positions', { params: { excludeAdmin: 1, sort: 'asc' } })
+    positions.value = Array.isArray(data) ? data : []
+  } catch { positions.value = [] }
+}
+
+async function fetchServices () {
+  try {
+    const { data } = await api.get('/api/services')
+    services.value = Array.isArray(data) ? data : []
+  } catch { services.value = [] }
+}
+
+/* ---------- submit booking (with client-side conflict check) ---------- */
+async function submitBooking () {
+  errorMsg.value = ''
+  successMsg.value = ''
   if (!canSubmit.value) { errorMsg.value = 'กรุณาเลือกห้องและเวลาให้ถูกต้อง'; return }
+
+  // client-side overlap check
+  const s = new Date(startISO.value)
+  const e = new Date(endISO.value)
+  const hasConflict = roomSchedule.value.some(b => {
+    const bs = new Date(b.startTime)
+    const be = new Date(b.endTime)
+    return overlaps(s, e, bs, be)
+  })
+  if (hasConflict) {
+    errorMsg.value = 'ช่วงเวลาที่เลือกชนกับการจองอื่นในห้องนี้'
+    return
+  }
 
   const payload = {
     roomId: Number(form.value.roomId),
@@ -249,10 +341,13 @@ async function submitBooking() {
     serviceIds: form.value.serviceIds,
     agendaUrl: form.value.agendaUrl || undefined
   }
+
   try {
     submitting.value = true
     await api.post('/api/bookings', payload)
     successMsg.value = 'จองห้องสำเร็จ!'
+    // refresh schedule of that day
+    await fetchRoomSchedule()
   } catch (e) {
     console.error(e)
     errorMsg.value = e?.response?.data?.error || 'จองห้องไม่สำเร็จ'
@@ -261,8 +356,23 @@ async function submitBooking() {
   }
 }
 
+/* ---------- debug ---------- */
+const debugPayload = computed(() =>
+  JSON.stringify({
+    roomId: Number(form.value.roomId || 0),
+    startTime: startISO.value,
+    endTime: endISO.value,
+    requiredPositionIds: form.value.requiredPositionIds,
+    serviceIds: form.value.serviceIds,
+    agendaUrl: form.value.agendaUrl || undefined
+  }, null, 2)
+)
+
+/* ---------- effects ---------- */
 onMounted(async () => {
-  // ถ้าต้องการบังคับมี token ก่อนใช้งาน ให้เช็คและ redirect ที่นี่
-  await Promise.all([fetchRooms(), fetchPositions(), fetchServices()])
+  await Promise.all([fetchMe(), fetchRooms(), fetchPositions(), fetchServices()])
 })
+
+// เมื่อเลือกห้องหรือเปลี่ยนวัน → โหลดตารางห้องวันนั้น
+watch(() => [form.value.roomId, form.value.startLocal], () => { fetchRoomSchedule() })
 </script>

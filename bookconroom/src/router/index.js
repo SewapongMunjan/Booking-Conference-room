@@ -1,4 +1,7 @@
+// src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
+
+// --- Pages ---
 import Loginpage from '../components/Loginpage.vue'
 import Home from '../components/Home.vue'
 import Booking from '../components/Booking.vue'
@@ -9,74 +12,89 @@ import RoomUse from '../components/RoomUse.vue'
 import BookingInfo from '../components/BookingInfo.vue'
 import BookCompleteInfo from '../components/BookCompleteInfo.vue'
 import AdminApprovals from '../components/AdminApprovals.vue'
-import MyInvites from '../components/MyInvites.vue';
+import MyInvites from '../components/MyInvites.vue'
 
+// --- Routes + meta ---
 const routes = [
-  { path: '/', redirect: '/login' },
+  { path: '/', redirect: '/home', meta: { requiresAuth: true } },
   { path: '/login', component: Loginpage },
-  { path: '/home', component: Home },
-  { path: '/booking', component: Booking },
-  { path: '/booking-list', component: BookingList },
-  { path: '/room-use', component: RoomUse },
-  { path: '/room-status', component: RoomStatus },
-  { path: '/report', component: Report },
-  { path: '/booking-info', component: BookingInfo },
-  { path: '/bookcompleteinfo', component: BookCompleteInfo },
-  { path: '/admin/approvals', component: AdminApprovals, meta: { requiresAdmin: true } },
-  { path: '/my-invites', component: MyInvites },
-  { path: '/:pathMatch(.*)*', redirect: '/' },
+
+  { path: '/home', component: Home, meta: { requiresAuth: true } },
+  { path: '/booking', component: Booking, meta: { requiresAuth: true } },
+  { path: '/booking-list', component: BookingList, meta: { requiresAuth: true } },
+  { path: '/room-use', component: RoomUse, meta: { requiresAuth: true } },
+  { path: '/room-status', component: RoomStatus, meta: { requiresAuth: true } },
+  { path: '/report', component: Report, meta: { requiresAuth: true } },
+  { path: '/booking-info', component: BookingInfo, meta: { requiresAuth: true } },
+  { path: '/bookcompleteinfo', component: BookCompleteInfo, meta: { requiresAuth: true } },
+
+  // เฉพาะแอดมิน
+  { path: '/admin/approvals', component: AdminApprovals, meta: { requiresAuth: true, requiresAdmin: true } },
+
+  { path: '/my-invites', component: MyInvites, meta: { requiresAuth: true } },
+
+  { path: '/booking-info/:id', component: BookingInfo },
+
+  // fallback
+  { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
 
+// --- Router ---
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
 })
 
-async function getIsAdmin() {
+/**
+ * ปลอดภัยกับ base64url (JWT)
+ * คืน payload object หรือ null
+ */
+function decodeJwtPayload(token) {
+  try {
+    const part = token.split('.')[1] || ''
+    // base64url -> base64
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/')
+    const json = atob(b64)
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
+function isLoggedIn() {
+  return !!localStorage.getItem('access_token')
+}
+
+function isAdminFromToken() {
   const token = localStorage.getItem('access_token')
   if (!token) return false
-  try {
-    // ดึงจาก backend ให้ชัวร์
-    const res = await fetch(import.meta.env.VITE_API_URL
-      ? `${import.meta.env.VITE_API_URL}/api/auth/me`
-      : 'http://localhost:3001/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-    if (!res.ok) return false
-    const me = await res.json()
-    return !!me?.position?.isAdmin // ปรับตาม shape ที่ backend คืนให้
-  } catch {
-    return false
-  }
+  const payload = decodeJwtPayload(token)
+  return !!payload?.pos?.isAdmin
 }
 
-// ------- Helpers -------
-function parseIsAdminFromToken() {
-  try {
-    const token = localStorage.getItem('access_token') // 
-    if (!token) return false
-    const payload = JSON.parse(atob((token.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/')))
-    return !!payload?.pos?.isAdmin
-  } catch {
-    return false
-  }
-}
-
-// ------- Navigation guard -------
+// --- Global guard ---
 router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('access_token')
-  const isAuthed = !!token
-  let isAdmin = false
-  try {
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      isAdmin = !!payload?.pos?.isAdmin
-    }
-  } catch {}
+  const authed = isLoggedIn()
 
-  if (to.path !== '/login' && !isAuthed) return next('/login')
-  if (to.path === '/login' && isAuthed) return next('/home')
-  if (to.path.startsWith('/admin') && !isAdmin) return next('/home')
+  // ต้องล็อกอิน
+  if (to.meta?.requiresAuth && !authed) {
+    // จำปลายทางไว้ แล้วไป login
+    sessionStorage.setItem('post_login_redirect', to.fullPath)
+    return next('/login')
+  }
+
+  // ไปหน้า login ทั้งที่ล็อกอินแล้ว → ส่งกลับปลายทางเดิมหรือ /home
+  if (to.path === '/login' && authed) {
+    const back = sessionStorage.getItem('post_login_redirect') || '/home'
+    sessionStorage.removeItem('post_login_redirect')
+    return next(back)
+  }
+
+  // ต้องเป็นแอดมิน
+  if (to.meta?.requiresAdmin && !isAdminFromToken()) {
+    return next('/home')
+  }
+
   next()
 })
 
