@@ -58,6 +58,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
+import Swal from 'sweetalert2'
 
 const router = useRouter()
 const username = ref('')
@@ -75,9 +76,20 @@ const onLogin = async () => {
     // (ถ้ามีข้อมูล user) เก็บไว้ใช้ต่อ
     if (data.user) localStorage.setItem('me', JSON.stringify(data.user))
 
+    await Swal.fire({
+      icon: 'success',
+      title: 'เข้าสู่ระบบสำเร็จ',
+      showConfirmButton: false,
+      timer: 1500
+    })
     router.push('/home')
   } catch (e) {
-    alert(e?.response?.data?.error || 'เข้าสู่ระบบไม่สำเร็จ')
+    await Swal.fire({
+      icon: 'error',
+      title: 'เข้าสู่ระบบไม่สำเร็จ',
+      text: e?.response?.data?.error || 'เข้าสู่ระบบไม่สำเร็จ',
+      confirmButtonText: 'ตกลง'
+    })
   }
 }
 </script>
