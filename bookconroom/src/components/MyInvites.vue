@@ -132,6 +132,7 @@
 </template>
 
 <script setup>
+import Swal from 'sweetalert2'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/lib/api.js'
@@ -199,16 +200,51 @@ async function fetchInvites () {
   }
 }
 async function accept (inv) {
-  if (!confirm('ยืนยันการเข้าประชุม?')) return
+  const result = await Swal.fire({
+    title: 'ยืนยันการเข้าประชุม?',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'ยืนยัน',
+    cancelButtonText: 'ยกเลิก'
+  })
+  if (!result.isConfirmed) return
   actingId.value = inv.id
-  try { await api.post(`/api/bookings/${inv.bookingId}/confirm`); await fetchInvites() }
-  finally { actingId.value = null }
+  try {
+    await api.post(`/api/bookings/${inv.bookingId}/confirm`)
+    await fetchInvites()
+    await Swal.fire({
+      icon: 'success',
+      title: 'ยืนยันเข้าประชุมสำเร็จ',
+      timer: 1500,
+      showConfirmButton: false
+    })
+  } finally {
+    actingId.value = null
+  }
 }
 async function decline (inv) {
-  if (!confirm('ต้องการปฏิเสธคำเชิญนี้?')) return
+  const result = await Swal.fire({
+    title: 'ต้องการปฏิเสธคำเชิญนี้?',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'ปฏิเสธ',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#d33'
+  })
+  if (!result.isConfirmed) return
   actingId.value = inv.id
-  try { await api.post(`/api/bookings/${inv.bookingId}/decline`); await fetchInvites() }
-  finally { actingId.value = null }
+  try {
+    await api.post(`/api/bookings/${inv.bookingId}/decline`)
+    await fetchInvites()
+    await Swal.fire({
+      icon: 'success',
+      title: 'ปฏิเสธคำเชิญสำเร็จ',
+      timer: 1500,
+      showConfirmButton: false
+    })
+  } finally {
+    actingId.value = null
+  }
 }
 
 onMounted(async () => {

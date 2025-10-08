@@ -92,7 +92,7 @@
                   <td class="px-4 py-3">{{ b.bookedBy?.fullName || '-' }}</td>
                   <td class="px-4 py-3">
                     <span class="px-3 py-1 rounded-full bg-blue-100 text-blue-800">
-                      รอผู้ดูแลอนุมัติ
+                      {{ statusTH(b.status) }}
                     </span>
                   </td>
                   <td class="px-4 py-3">
@@ -170,7 +170,10 @@
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
               <div class="text-gray-500">ห้อง</div>
-              <div class="font-medium">{{ detail.room?.roomName }} <span v-if="detail.room?.capacity" class="text-gray-500">· {{ detail.room.capacity }} ที่นั่ง</span></div>
+              <div class="font-medium">
+                {{ detail.room?.roomName }}
+                <span v-if="detail.room?.capacity" class="text-gray-500">· {{ detail.room.capacity }} ที่นั่ง</span>
+              </div>
             </div>
             <div>
               <div class="text-gray-500">ผู้จอง</div>
@@ -242,6 +245,7 @@
 </template>
 
 <script setup>
+import Swal from 'sweetalert2'
 import { ref, computed, onMounted, watch } from 'vue'
 import api from '@/lib/api.js'
 
@@ -309,19 +313,51 @@ function inviteTH(s){
   }
 }
 
-/* ---------- list awaiting approvals ---------- */
+/* ---------- sort helper (ล่าสุดก่อน) ---------- */
+function sortByNewest(a, b) {
+  const ta = Date.parse(a.createdAt || a.startTime || 0);
+  const tb = Date.parse(b.createdAt || b.startTime || 0);
+  return tb - ta;
+}
+
+/* ---------- list awaiting approvals (หลายสถานะ) ---------- */
 async function fetchList () {
   if (!isAdmin.value) return
   loading.value = true
   errorMsg.value = ''
+
   try {
-    const params = { status: 'AWAITING_ADMIN_APPROVAL', page: page.value, pageSize: pageSize.value }
-    const { data } = await api.get('/api/bookings', { params })
-    const list = Array.isArray(data?.items) ? data.items : []
-    items.value = list
-    total.value = typeof data?.total === 'number' ? data.total : list.length
+    // ปรับชื่อให้ตรงกับแบ็กเอนด์ของคุณได้
+    const PENDING_STATUSES = ['AWAITING_ADMIN_APPROVAL', 'AWAITING_ATTENDEE_CONFIRM']
+
+    // ดึงหลายสถานะแล้วรวม (วิธีที่ใช้ได้กับทุกแบ็กเอนด์)
+    const paramsBase = { page: 1, pageSize: 500, sort: '-createdAt' }
+    const reqs = PENDING_STATUSES.map(st =>
+      api.get('/api/bookings', { params: { ...paramsBase, status: st } })
+    )
+    const resps = await Promise.allSettled(reqs)
+
+    const collected = []
+    for (const r of resps) {
+      if (r.status === 'fulfilled') {
+        const arr = Array.isArray(r.value?.data?.items) ? r.value.data.items : []
+        collected.push(...arr)
+      }
+    }
+
+    // รวม + กำจัดซ้ำ + เรียงล่าสุดก่อน
+    const mergedMap = new Map()
+    collected.forEach(it => mergedMap.set(it.id, it))
+    const merged = Array.from(mergedMap.values()).sort(sortByNewest)
+
+    // ตัดตามหน้า UI
+    total.value = merged.length
     const maxPage = Math.max(1, Math.ceil(total.value / pageSize.value))
     if (page.value > maxPage) page.value = maxPage
+    const start = (page.value - 1) * pageSize.value
+    const end   = start + pageSize.value
+    items.value = merged.slice(start, end)
+
   } catch (e) {
     console.error(e)
     errorMsg.value = e?.response?.data?.error || 'โหลดรายการไม่สำเร็จ'
@@ -334,27 +370,47 @@ async function fetchList () {
 
 /* ---------- actions ---------- */
 async function approve (b) {
-  if (!confirm(`อนุมัติการจองห้อง ${b.room?.roomName || b.id}?`)) return
+  const result = await Swal.fire({
+    title: `อนุมัติการจองห้อง ${b.room?.roomName || b.id}?`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'อนุมัติ',
+    cancelButtonText: 'ยกเลิก'
+  })
+  if (!result.isConfirmed) return
   try {
     actingId.value = b.id
     await api.post(`/api/bookings/${b.id}/approve`)
+    page.value = 1
     await fetchList()
+    await Swal.fire({ icon: 'success', title: 'อนุมัติสำเร็จ', timer: 1500, showConfirmButton: false })
   } catch (e) {
     console.error(e)
-    alert(e?.response?.data?.error || 'อนุมัติไม่สำเร็จ')
+    await Swal.fire({ icon: 'error', title: 'อนุมัติไม่สำเร็จ', text: e?.response?.data?.error || 'อนุมัติไม่สำเร็จ' })
   } finally {
     actingId.value = null
   }
 }
+
 async function cancel (b) {
-  if (!confirm(`ยืนยันยกเลิกการจองห้อง ${b.room?.roomName || b.id}?`)) return
+  const result = await Swal.fire({
+    title: `ยืนยันยกเลิกการจองห้อง ${b.room?.roomName || b.id}?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'ยกเลิกการจอง',
+    cancelButtonText: 'กลับ',
+    confirmButtonColor: '#d33'
+  })
+  if (!result.isConfirmed) return
   try {
     actingId.value = b.id
     await api.patch(`/api/bookings/${b.id}/cancel`)
+    page.value = 1
     await fetchList()
+    await Swal.fire({ icon: 'success', title: 'ยกเลิกสำเร็จ', timer: 1500, showConfirmButton: false })
   } catch (e) {
     console.error(e)
-    alert(e?.response?.data?.error || 'ยกเลิกไม่สำเร็จ')
+    await Swal.fire({ icon: 'error', title: 'ยกเลิกไม่สำเร็จ', text: e?.response?.data?.error || 'ยกเลิกไม่สำเร็จ' })
   } finally {
     actingId.value = null
   }
@@ -373,7 +429,7 @@ async function openDetail (row) {
   detail.value = null
   try {
     const { data } = await api.get(`/api/bookings/${row.id}`)
-    // คาดหวัง include: room, bookedBy, requiredPositions.position, invites.user, noteTakers.user, services.service
+    // expect include: room, bookedBy, requiredPositions.position, invites.user, noteTakers.user, services.service
     detail.value = data?.booking || data
   } catch (e) {
     console.error(e)
@@ -382,13 +438,12 @@ async function openDetail (row) {
     detailLoading.value = false
   }
 }
-function closeDetail () {
-  showDetail.value = false
-}
+function closeDetail () { showDetail.value = false }
 
 /* ---------- lifecycle ---------- */
 onMounted(async () => {
   await fetchMe()
+  page.value = 1
   await fetchList()
 })
 watch(page, () => fetchList())

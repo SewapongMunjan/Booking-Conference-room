@@ -10,21 +10,6 @@
       <p class="text-sm text-gray-600 m-0">Meeting Room Booking System</p>
     </div>
 
-    <!-- Search -->
-    <div class="flex flex-1 max-w-2xl mx-8">
-      <input
-        v-model.trim="keyword"
-        type="text"
-        placeholder="ค้นหา..."
-        class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-l-full outline-none text-gray-900 focus:border-blue-500"
-      >
-      <button
-        class="bg-blue-600 text-white border-none px-4 py-2 rounded-r-full cursor-pointer hover:bg-blue-700 transition-colors"
-        @click="onSearch"
-      >
-        🔍
-      </button>
-    </div>
 
     <!-- Right -->
     <div class="flex items-center gap-3 relative">
@@ -56,13 +41,9 @@
             <div v-else-if="errorNoti" class="p-4 text-sm text-red-600">{{ errorNoti }}</div>
 
             <template v-else>
-              <div
-                v-if="notifs.length === 0"
-                class="p-4 text-sm text-gray-500"
-              >
+              <div v-if="notifs.length === 0" class="p-4 text-sm text-gray-500">
                 ยังไม่มีการแจ้งเตือน
               </div>
-
               <div v-else class="divide-y">
                 <div
                   v-for="n in notifs"
@@ -127,17 +108,17 @@
   </div>
 </header>
 
-    <div class="max-w-7xl mx-auto flex gap-6 p-6">
+   <div class="max-w-7xl mx-auto flex gap-6 p-6">
       <!-- Sidebar -->
       <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
         <nav class="flex flex-col gap-2">
-          <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-200 transition-colors">
+          <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
             <span class="text-lg">🏠</span> หน้าแรก
           </router-link>
           <router-link to="/booking" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
             <span class="text-lg">📅</span> จองห้องประชุม
           </router-link>
-          <router-link to="/booking-list" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 font-medium">
+          <router-link to="/booking-list" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
             <span class="text-lg">📋</span> รายการจองของฉัน
           </router-link>
           <router-link to="/room-use" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
@@ -149,14 +130,15 @@
           <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
             <span class="text-lg">⚠️</span> แจ้งปัญหา
           </router-link>
-          <router-link v-if="isAdmin" to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 hover:bg-blue-200 rounded-lg font-medium">
+          <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg font-medium">
             <span class="text-lg">🛡️</span> อนุมัติการจอง (Admin)
           </router-link>
           <router-link to="/my-invites" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200">
-  <span class="text-lg">📨</span> คำเชิญของฉัน
-</router-link>
+            <span class="text-lg">📨</span> คำเชิญของฉัน
+          </router-link>
         </nav>
       </aside>
+
 
       <!-- Main Dashboard -->
       <main class="flex-1 flex flex-col gap-6">
@@ -172,50 +154,48 @@
         </div>
 
         <!-- Content Area -->
-        <div class="grid grid-cols-2 gap-6">
-          <!-- Left: News Card -->
-          <div class="flex flex-col gap-6">
-            <section class="bg-white rounded-xl p-8 shadow-sm">
-              <h2 class="text-xl font-semibold text-blue-600 mb-6">ประชาสัมพันธ์</h2>
-              <div class="flex flex-col items-center">
-                <img 
-                  src="https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?auto=format&fit=crop&w=400&q=80" 
-                  alt="Meeting room" 
-                  class="w-full h-44 object-cover rounded-lg mb-4"
-                >
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">ยินดีต้อนรับสู่การจัดการประชุมยุคใหม่</h3>
-                <p class="text-gray-600 leading-relaxed text-sm mb-4">
-                  เพื่อส่งความสะดวกในการจัดการประชุม ระบบจองห้องประชุมอัจฉริยะ ถูกพัฒนาขึ้นเพื่อให้การจองห้องประชุมขององค์กรเป็นเรื่องง่ายและไม่ซับซ้อน!
-                </p>
-                <!-- Pagination dots -->
-                <div class="flex gap-2 justify-center">
-                  <span class="w-2 h-2 rounded-full bg-blue-600"></span>
-                  <span class="w-2 h-2 rounded-full bg-gray-300"></span>
-                  <span class="w-2 h-2 rounded-full bg-gray-300"></span>
+        <!-- News Card Slider (full width, responsive) -->
+        <div class="w-full flex flex-col gap-6">
+          <section class="relative bg-white rounded-xl p-0 shadow-sm overflow-hidden w-full">
+            <h2 class="text-xl font-semibold text-blue-600 mb-0 px-8 pt-8">ประชาสัมพันธ์</h2>
+            <div class="relative w-full flex items-center justify-center">
+              <button @click="prevNews" class="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-white/80 hover:bg-white text-blue-700 rounded-full p-2 shadow hidden sm:block">
+                <span class="sr-only">ก่อนหน้า</span>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+              </button>
+              <div class="w-full overflow-hidden">
+                <div class="flex transition-transform duration-500" :style="{ transform: `translateX(-${currentNews * 100}%)` }">
+                  <div v-for="(card, idx) in newsCards" :key="idx" class="min-w-full flex flex-col md:flex-row items-center justify-center">
+                    <img :src="card.img" :alt="card.title" class="w-full md:w-1/2 h-64 md:h-96 object-cover rounded-lg md:rounded-none md:rounded-l-xl" />
+                    <div class="flex-1 p-8 flex flex-col justify-center items-center md:items-start">
+                      <h3 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2 text-center md:text-left">{{ card.title }}</h3>
+                      <p class="text-gray-600 leading-relaxed text-base mb-4 text-center md:text-left">{{ card.desc }}</p>
+                      <div v-if="card.details" class="w-full grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div v-for="(detail, dIdx) in card.details" :key="dIdx" :class="detail.class">
+                          <h4 class="font-semibold mb-1" :class="detail.titleClass">{{ detail.heading }}</h4>
+                          <ul class="list-disc ml-5 text-gray-700 text-sm">
+                            <li v-for="(item, i) in detail.items" :key="i">{{ item }}</li>
+                          </ul>
+                        </div>
+                      </div>
+                      <div v-if="card.buttons" class="flex gap-4 mt-6 justify-center md:justify-start">
+                        <a v-for="(btn, bIdx) in card.buttons" :key="bIdx" :href="btn.href" class="px-6 py-2 rounded-full font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors text-base">{{ btn.text }}</a>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </section>
-          </div>
-
-          <!-- Right: Notification Card -->
-          <div class="flex flex-col gap-6">
-            <section class="bg-white rounded-xl p-8 shadow-sm flex gap-6 items-center">
-              <div class="bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg flex-shrink-0">
-                1
+              <button @click="nextNews" class="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-white/80 hover:bg-white text-blue-700 rounded-full p-2 shadow hidden sm:block">
+                <span class="sr-only">ถัดไป</span>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+              </button>
+              <!-- Pagination dots -->
+              <div class="absolute bottom-4 left-0 right-0 flex gap-2 justify-center z-10">
+                <span v-for="(card, i) in newsCards" :key="i" :class="['w-3 h-3 rounded-full border-2', i === currentNews ? 'bg-blue-600 border-blue-600' : 'bg-white border-blue-300']"></span>
               </div>
-              <div class="flex-1">
-                <h3 class="text-lg font-semibold text-blue-600 mb-2">การแจ้งเตือน</h3>
-                <div class="flex items-center gap-2 mb-2">
-                  <span class="w-2 h-2 rounded-full bg-blue-600"></span>
-                  <span class="text-gray-900 font-medium text-sm">คุณยังไม่ได้ยืนยันการเข้าร่วมประชุม</span>
-                </div>
-                <p class="text-gray-600 text-sm mb-2">
-                  คุณได้รับเชิญเข้าร่วมประชุมที่จะจัดขึ้นในวันที่ 13/07/2568 ห้องประชุม A110 โปรดกดยืนยันการเข้าร่วมประชุมในระบบเพื่อไม่ให้พลาดกิจกรรมสำคัญ!
-                </p>
-              </div>
-            </section>
+            </div>
+          </section>
           </div>
-        </div>
 
         <!-- Bottom: Calendar and Today Info -->
         <div class="grid grid-cols-2 gap-6">
@@ -264,6 +244,67 @@
 </template>
 
 <script setup>
+// News Card Slider State
+import { ref as vueRef, onMounted as vueOnMounted, onUnmounted as vueOnUnmounted } from 'vue'
+const newsCards = [
+  {
+    img: 'https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?auto=format&fit=crop&w=900&q=80',
+    title: "ยินดีต้อนรับสู่การจัดการประชุมยุคใหม่",
+    desc: "เพื่อส่งความสะดวกในการจัดการประชุม ระบบจองห้องประชุมอัจฉริยะ ถูกพัฒนาขึ้นเพื่อให้การจองห้องประชุมขององค์กรเป็นเรื่องง่ายและไม่ซับซ้อน!",
+    details: [
+      {
+        heading: "📢 ประกาศใหม่",
+        class: "bg-blue-50 rounded-lg p-4",
+        titleClass: "text-blue-700",
+        items: [
+          "ระบบรองรับการจองห้องประชุมล่วงหน้าได้ถึง 6 เดือน",
+          "เพิ่มฟีเจอร์แจ้งเตือนผ่านอีเมลสำหรับการจองและยกเลิก"
+        ]
+      },
+      {
+        heading: "🆕 อัปเดตล่าสุด",
+        class: "bg-green-50 rounded-lg p-4",
+        titleClass: "text-green-700",
+        items: [
+          "ปรับปรุง UI ให้ใช้งานง่ายขึ้นบนมือถือ",
+          "เพิ่มระบบรายงานปัญหาและข้อเสนอแนะ"
+        ]
+      }
+    ]
+  },
+  {
+    img: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca?auto=format&fit=crop&w=900&q=80',
+    title: "ระบบแจ้งเตือนใหม่!",
+    desc: "ไม่พลาดทุกการเปลี่ยนแปลง ระบบแจ้งเตือนผ่านอีเมลและแอป แจ้งเตือนทุกการจองและยกเลิกแบบเรียลไทม์",
+    buttons: [
+      { text: "ดูรายละเอียด", href: "#" },
+      { text: "ตั้งค่าการแจ้งเตือน", href: "#" }
+    ]
+  },
+  {
+    img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=900&q=80',
+    title: "จองห้องประชุมได้ทุกที่ ทุกเวลา",
+    desc: "รองรับการจองผ่านมือถือและคอมพิวเตอร์ สะดวก รวดเร็ว ทุกเวลา พร้อมระบบค้นหาห้องว่างแบบเรียลไทม์",
+    buttons: [
+      { text: "จองห้องประชุม", href: "#" },
+      { text: "ดูห้องว่าง", href: "#" }
+    ]
+  }
+]
+const currentNews = vueRef(0)
+let newsInterval = null
+function nextNews() {
+  currentNews.value = (currentNews.value + 1) % newsCards.length
+}
+function prevNews() {
+  currentNews.value = (currentNews.value - 1 + newsCards.length) % newsCards.length
+}
+vueOnMounted(() => {
+  newsInterval = setInterval(nextNews, 7000)
+})
+vueOnUnmounted(() => {
+  if (newsInterval) clearInterval(newsInterval)
+})
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
@@ -279,14 +320,7 @@ function logout () {
   router.push('/login')
 }
 
-/* ===== ค้นหา ===== */
-const keyword = ref('')
-function onSearch () {
-  const q = keyword.value.trim()
-  if (!q) return
-  router.push({ path: '/search', query: { q } })
-  keyword.value = ''
-}
+// Search bar removed
 
 /* ===== เวลา + ปฏิทิน ===== */
 const currentTime  = ref('')

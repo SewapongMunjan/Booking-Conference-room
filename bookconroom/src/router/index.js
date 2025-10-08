@@ -14,6 +14,9 @@ import BookCompleteInfo from '../components/BookCompleteInfo.vue'
 import AdminApprovals from '../components/AdminApprovals.vue'
 import MyInvites from '../components/MyInvites.vue'
 
+// ถ้าใช้แดชบอร์ดแอดมินตัวใหม่ ให้ uncomment บรรทัดนี้ แล้วใช้ route ด้านล่าง
+// import AdminDashboard from '../pages/AdminDashboard.vue'
+
 // --- Routes + meta ---
 const routes = [
   { path: '/', redirect: '/home', meta: { requiresAuth: true } },
@@ -28,12 +31,17 @@ const routes = [
   { path: '/booking-info', component: BookingInfo, meta: { requiresAuth: true } },
   { path: '/bookcompleteinfo', component: BookCompleteInfo, meta: { requiresAuth: true } },
 
-  // เฉพาะแอดมิน
+  // --- เฉพาะแอดมิน ---
+  // 1) หน้าอนุมัติเดิม
   { path: '/admin/approvals', component: AdminApprovals, meta: { requiresAuth: true, requiresAdmin: true } },
+
+  // 2) แดชบอร์ดแอดมินใหม่ (ถ้าใช้ ให้ uncomment)
+  // { path: '/admin/dashboard', component: AdminDashboard, meta: { requiresAuth: true, requiresAdmin: true } },
 
   { path: '/my-invites', component: MyInvites, meta: { requiresAuth: true } },
 
-  { path: '/booking-info/:id', component: BookingInfo },
+  // ให้ /booking-info/:id ก็เช็คล็อกอินด้วย
+  { path: '/booking-info/:id', component: BookingInfo, meta: { requiresAuth: true } },
 
   // fallback
   { path: '/:pathMatch(.*)*', redirect: '/home' },
@@ -46,14 +54,16 @@ const router = createRouter({
 })
 
 /**
- * ปลอดภัยกับ base64url (JWT)
+ * ปลอดภัยกับ base64url (JWT) + padding
  * คืน payload object หรือ null
  */
 function decodeJwtPayload(token) {
   try {
     const part = token.split('.')[1] || ''
     // base64url -> base64
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/')
+    let b64 = part.replace(/-/g, '+').replace(/_/g, '/')
+    // เติม padding ให้ครบหาร 4 ลงตัว
+    while (b64.length % 4 !== 0) b64 += '='
     const json = atob(b64)
     return JSON.parse(json)
   } catch {
@@ -69,7 +79,12 @@ function isAdminFromToken() {
   const token = localStorage.getItem('access_token')
   if (!token) return false
   const payload = decodeJwtPayload(token)
-  return !!payload?.pos?.isAdmin
+  // รองรับหลายรูปแบบจาก backend
+  return !!(
+    payload?.pos?.isAdmin ||
+    payload?.isAdmin ||
+    (typeof payload?.role === 'string' && payload.role.toUpperCase() === 'ADMIN')
+  )
 }
 
 // --- Global guard ---
