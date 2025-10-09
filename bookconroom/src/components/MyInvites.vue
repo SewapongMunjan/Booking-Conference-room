@@ -133,7 +133,7 @@
   <!-- Sidebar -->
   <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
     <nav class="flex flex-col gap-2">
-      <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
+      <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
         <span class="text-lg">🏠</span> หน้าแรก
       </router-link>
       <router-link to="/booking" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
@@ -154,7 +154,7 @@
       <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg font-medium">
         <span class="text-lg">🛡️</span> อนุมัติการจอง (Admin)
       </router-link>
-      <router-link to="/my-invites" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200">
+      <router-link to="/my-invites" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
         <span class="text-lg">📨</span> คำเชิญของฉัน
       </router-link>
     </nav>

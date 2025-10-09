@@ -161,7 +161,7 @@
   </aside>
 
       <!-- Main -->
-      <main class="flex-1">
+      <main class="flex-1 space-y-6">
         <div class="mb-6 flex items-center gap-4">
           <div class="bg-blue-600 text-white w-14 h-14 rounded-xl flex items-center justify-center text-2xl">🔒</div>
           <div>
@@ -307,7 +307,7 @@
                 <!-- รูป: ความสูงคงที่ + overflow ที่กล่องรูปเท่านั้น -->
                 <div class="w-full bg-white border rounded-lg overflow-hidden">
                   <img
-                    :src="(rooms.find(r => r.id === form.roomId)?.photoUrl) || 'https://images.unsplash.com/photo-1557800636-894a64c1696f?q=80&w=1200&auto=format&fit=crop'"
+                    :src="(rooms.find(r => r.id === form.roomId)?.photoUrl) || 'https://t4.ftcdn.net/jpg/00/80/91/11/360_F_80911186_RoBCsyLrNTrG7Y1EOyCsaCJO5DyHgTox.jpg'"
                     alt="room preview"
                     class="w-full h-40 md:h-48 object-cover"
                   />
