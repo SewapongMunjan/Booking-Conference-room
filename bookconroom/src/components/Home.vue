@@ -3,7 +3,7 @@
   <div class="min-h-screen bg-gray-100">
     <!-- Header -->
     <header class="bg-white px-8 py-4 shadow-sm border-b">
-  <div class="max-w-7xl mx-auto flex justify-between items-center">
+  <div class="w-full px-6 mx-auto flex justify-between items-center">
     <!-- Left -->
     <div>
       <h2 class="text-lg font-semibold text-blue-600 m-0">ระบบจองห้องประชุม</h2>
@@ -16,11 +16,21 @@
       <!-- Notifications -->
       <div class="relative">
         <button
-          data-noti-bell
+  data-noti-bell
   class="w-10 h-10 rounded-full flex items-center justify-center border hover:bg-gray-50 relative"
   @click="toggleNotif"
-> 🔔
-  <span v-if="unreadCount > 0" class="absolute -top-1 -right-1 ...">
+  aria-label="เปิดการแจ้งเตือน"
+>
+  <img
+    src="https://cdn-icons-png.flaticon.com/128/1827/1827370.png"
+    alt="กระดิ่งแจ้งเตือน"
+    class="w-5 h-5 object-contain"
+    loading="lazy"
+  />
+  <span
+    v-if="unreadCount > 0"
+    class="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-600 text-white text-[11px] leading-5 text-center"
+  >
     {{ unreadCount > 9 ? '9+' : unreadCount }}
   </span>
 </button>
@@ -97,149 +107,127 @@
       </div>
 
       <!-- Avatar + Logout -->
-      <img :src="me?.avatarUrl || 'https://via.placeholder.com/40x40'" alt="Profile" class="w-10 h-10 rounded-full border-2 border-gray-300">
-      <button
-        @click="logout"
-        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-      >
-        ออกจากระบบ
-      </button>
+      <!-- Avatar (click -> /profile) + Logout -->
+       <router-link
+          to="/profile"
+          class="shrink-0 inline-block rounded-full focus:outline-none focus:ring-2 focus:ring-blue-600"
+          title="ดูโปรไฟล์"
+        >
+      <img
+          :src="me?.avatarUrl || 'https://cdn-icons-png.flaticon.com/128/456/456283.png'"
+          alt="เปิดโปรไฟล์"
+          class="w-10 h-10 rounded-full border-2 border-gray-300 cursor-pointer hover:ring-2 hover:ring-blue-500"
+      />
+        </router-link>
+
+        <button
+          @click="logout"
+            class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+          >
+         ออกจากระบบ
+        </button>
     </div>
   </div>
 </header>
 
-   <div class="max-w-7xl mx-auto flex gap-6 p-6">
-      <!-- Sidebar -->
-      <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
-        <nav class="flex flex-col gap-2">
-          <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
-            <span class="text-lg">🏠</span> หน้าแรก
-          </router-link>
-          <router-link to="/booking" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">📅</span> จองห้องประชุม
-          </router-link>
-          <router-link to="/booking-list" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">📋</span> รายการจองของฉัน
-          </router-link>
-          <router-link to="/room-use" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">🗂️</span> ตารางการใช้ห้องประชุม
-          </router-link>
-          <router-link to="/room-status" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">ℹ️</span> สถานะห้องประชุม
-          </router-link>
-          <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-            <span class="text-lg">⚠️</span> แจ้งปัญหา
-          </router-link>
-          <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg font-medium">
-            <span class="text-lg">🛡️</span> อนุมัติการจอง (Admin)
-          </router-link>
-          <router-link to="/my-invites" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200">
-            <span class="text-lg">📨</span> คำเชิญของฉัน
-          </router-link>
-        </nav>
-      </aside>
+<div class="w-full px-6 ml-0 mr-auto flex gap-6 py-6">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
+    <nav class="flex flex-col gap-2">
+      <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
+        <span class="text-lg">🏠</span> หน้าแรก
+      </router-link>
+      <router-link to="/booking" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+        <span class="text-lg">📅</span> จองห้องประชุม
+      </router-link>
+      <router-link to="/booking-list" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+        <span class="text-lg">📋</span> รายการจองของฉัน
+      </router-link>
+      <router-link to="/room-use" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+        <span class="text-lg">🗂️</span> ตารางการใช้ห้องประชุม
+      </router-link>
+      <router-link to="/room-status" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+        <span class="text-lg">ℹ️</span> สถานะห้องประชุม
+      </router-link>
+      <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+        <span class="text-lg">⚠️</span> แจ้งปัญหา
+      </router-link>
+      <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg font-medium">
+        <span class="text-lg">🛡️</span> อนุมัติการจอง (Admin)
+      </router-link>
+      <router-link to="/my-invites" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200">
+        <span class="text-lg">📨</span> คำเชิญของฉัน
+      </router-link>
+    </nav>
+  </aside>
 
+  <!-- Main: FULL-WIDTH CONTENT COLUMN -->
+  <main class="flex-1 space-y-6">
+    <!-- บล็อกหัวเรื่อง/ประกาศ: กินเต็มแถว -->
+    <section class="w-full bg-white rounded-xl shadow-sm p-5">
+      <div class="flex items-center gap-3">
+        <div class="bg-blue-600 text-white w-12 h-12 rounded-xl flex items-center justify-center text-xl">🏠</div>
+        <div>
+          <h3 class="m-0 text-xl font-semibold text-blue-600">หน้าแรก</h3>
+          <p class="m-0 text-sm text-gray-500">ระบบจองห้องประชุม</p>
+        </div>
+      </div>
+    </section>
 
-      <!-- Main Dashboard -->
-      <main class="flex-1 flex flex-col gap-6">
-        <!-- Page Header -->
-        <div class="bg-white rounded-xl shadow-sm p-6 flex items-center gap-4">
-          <div class="bg-blue-600 text-white w-14 h-14 rounded-xl flex items-center justify-center text-2xl">
-            🏠
-          </div>
-          <div>
-            <h1 class="text-2xl font-semibold text-blue-600 m-0">หน้าแรก</h1>
-            <p class="text-gray-600 text-sm m-0">ระบบจองห้องประชุม</p>
+    <!-- Hero/ประชาสัมพันธ์: กริด 12 คอลัมน์ ยืดเต็ม -->
+    <section class="w-full bg-white rounded-xl shadow-sm p-0">
+      <div class="grid grid-cols-12 gap-0 md:gap-6">
+        <!-- รูปภาพ -->
+        <div class="col-span-12 md:col-span-6">
+          <img
+            src="https://t4.ftcdn.net/jpg/00/80/91/11/360_F_80911186_RoBCsyLrNTrG7Y1EOyCsaCJO5DyHgTox.jpg"
+            alt="hero"
+            class="w-full h-[260px] md:h-[360px] object-cover rounded-t-xl md:rounded-l-xl md:rounded-tr-none"
+          />
+        </div>
+        <!-- ข้อความ/ปุ่ม -->
+        <div class="col-span-12 md:col-span-6 p-6 flex flex-col justify-center">
+          <h2 class="text-2xl md:text-3xl font-semibold text-gray-900 leading-snug">
+            จองห้องประชุมได้ทุกที่ ทุกเวลา
+          </h2>
+          <p class="mt-3 text-gray-600">
+            รองรับการจองผ่านมือถือและคอมพิวเตอร์ สะดวก รวดเร็ว พร้อมระบบเตือนกำหนดการแบบเรียลไทม์
+          </p>
+          <div class="mt-5 flex flex-wrap gap-3">
+            <router-link
+              to="/booking"
+              class="inline-flex items-center justify-center px-5 py-2 rounded-full bg-blue-600 text-white hover:bg-blue-700"
+            >จองห้องประชุม</router-link>
+            <router-link
+              to="/booking-list"
+              class="inline-flex items-center justify-center px-5 py-2 rounded-full bg-gray-100 text-gray-800 hover:bg-gray-200"
+            >ดูห้องว่าง</router-link>
           </div>
         </div>
+      </div>
+    </section>
 
-        <!-- Content Area -->
-        <!-- News Card Slider (full width, responsive) -->
-        <div class="w-full flex flex-col gap-6">
-          <section class="relative bg-white rounded-xl p-0 shadow-sm overflow-hidden w-full">
-            <h2 class="text-xl font-semibold text-blue-600 mb-0 px-8 pt-8">ประชาสัมพันธ์</h2>
-            <div class="relative w-full flex items-center justify-center">
-              <button @click="prevNews" class="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-white/80 hover:bg-white text-blue-700 rounded-full p-2 shadow hidden sm:block">
-                <span class="sr-only">ก่อนหน้า</span>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-              </button>
-              <div class="w-full overflow-hidden">
-                <div class="flex transition-transform duration-500" :style="{ transform: `translateX(-${currentNews * 100}%)` }">
-                  <div v-for="(card, idx) in newsCards" :key="idx" class="min-w-full flex flex-col md:flex-row items-center justify-center">
-                    <img :src="card.img" :alt="card.title" class="w-full md:w-1/2 h-64 md:h-96 object-cover rounded-lg md:rounded-none md:rounded-l-xl" />
-                    <div class="flex-1 p-8 flex flex-col justify-center items-center md:items-start">
-                      <h3 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2 text-center md:text-left">{{ card.title }}</h3>
-                      <p class="text-gray-600 leading-relaxed text-base mb-4 text-center md:text-left">{{ card.desc }}</p>
-                      <div v-if="card.details" class="w-full grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                        <div v-for="(detail, dIdx) in card.details" :key="dIdx" :class="detail.class">
-                          <h4 class="font-semibold mb-1" :class="detail.titleClass">{{ detail.heading }}</h4>
-                          <ul class="list-disc ml-5 text-gray-700 text-sm">
-                            <li v-for="(item, i) in detail.items" :key="i">{{ item }}</li>
-                          </ul>
-                        </div>
-                      </div>
-                      <div v-if="card.buttons" class="flex gap-4 mt-6 justify-center md:justify-start">
-                        <a v-for="(btn, bIdx) in card.buttons" :key="bIdx" :href="btn.href" class="px-6 py-2 rounded-full font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors text-base">{{ btn.text }}</a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <button @click="nextNews" class="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-white/80 hover:bg-white text-blue-700 rounded-full p-2 shadow hidden sm:block">
-                <span class="sr-only">ถัดไป</span>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-              </button>
-              <!-- Pagination dots -->
-              <div class="absolute bottom-4 left-0 right-0 flex gap-2 justify-center z-10">
-                <span v-for="(card, i) in newsCards" :key="i" :class="['w-3 h-3 rounded-full border-2', i === currentNews ? 'bg-blue-600 border-blue-600' : 'bg-white border-blue-300']"></span>
-              </div>
-            </div>
-          </section>
-          </div>
+    <!-- ตัวอย่างการ์ดอื่น ๆ: วางคู่ (2 คอลัมน์) และเต็มแถว -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="w-full bg-white rounded-xl shadow-sm p-6">
+        <h4 class="font-semibold text-gray-900">ปฏิทินวันนี้</h4>
+        <p class="text-gray-600 text-sm mt-2">แสดงสรุปรายการประชุมของวันนี้</p>
+        <!-- วาง widget ปฏิทิน/ตารางได้ที่นี่ -->
+      </div>
+      <div class="w-full bg-white rounded-xl shadow-sm p-6">
+        <h4 class="font-semibold text-gray-900">สรุปสถานะห้อง</h4>
+        <p class="text-gray-600 text-sm mt-2">สรุปห้องว่าง/ไม่ว่างตามช่วงเวลา</p>
+        <!-- วาง widget สถานะห้องได้ที่นี่ -->
+      </div>
+    </section>
 
-        <!-- Bottom: Calendar and Today Info -->
-        <div class="grid grid-cols-2 gap-6">
-          <!-- Calendar Card -->
-          <div class="bg-white rounded-xl p-8 shadow-sm flex flex-col items-center">
-            <div class="flex items-end gap-4 mb-2">
-              <span class="text-blue-600 font-bold text-6xl leading-none">{{ currentDate }}</span>
-              <div class="flex flex-col">
-                <span class="text-blue-600 font-bold text-xl">{{ currentMonth }}</span>
-                <span class="text-blue-600 font-bold text-xl">{{ currentYear }}</span>
-              </div>
-            </div>
-            <div class="text-xl text-gray-600 font-medium mb-4">{{ currentTime }}</div>
-            <!-- Mini Calendar -->
-            <div class="w-full">
-              <div class="grid grid-cols-7 bg-gray-100 rounded-t-lg">
-                <span class="py-2 text-center text-xs font-bold text-gray-600">Su</span>
-                <span class="py-2 text-center text-xs font-bold text-gray-600">Mo</span>
-                <span class="py-2 text-center text-xs font-bold text-gray-600">Tu</span>
-                <span class="py-2 text-center text-xs font-bold text-gray-600">We</span>
-                <span class="py-2 text-center text-xs font-bold text-gray-600">Th</span>
-                <span class="py-2 text-center text-xs font-bold text-gray-600">Fr</span>
-                <span class="py-2 text-center text-xs font-bold text-gray-600">Sa</span>
-              </div>
-              <div class="grid grid-cols-7 border border-gray-200 rounded-b-lg">
-                <span v-for="date in calendarDates" 
-                      :key="date.key" 
-                      :class="[
-                        'py-2 text-center text-sm cursor-pointer transition-colors',
-                        date.isToday ? 'bg-blue-600 text-white font-bold' : 'text-gray-900 hover:bg-blue-50',
-                        date.isOtherMonth ? 'text-gray-400' : ''
-                      ]">
-                  {{ date.date }}
-                </span>
-              </div>
-            </div>
-          </div>
-          <!-- Today Info Card -->
-          <div class="bg-white rounded-xl p-8 shadow-sm flex flex-col justify-center items-center">
-            <span class="text-gray-400 text-lg">ไม่มีกิจกรรมในวันนี้</span>
-          </div>
-        </div>
-      </main>
-    </div>
+    <section class="w-full bg-white rounded-xl shadow-sm p-6">
+      <h4 class="font-semibold text-gray-900">ข่าว/ประกาศล่าสุด</h4>
+      <p class="text-gray-600 text-sm mt-2">พื้นที่ประกาศข่าวสารของระบบ</p>
+      <!-- รายการประกาศ -->
+    </section>
+  </main>
+</div>
   </div>
 </template>
 

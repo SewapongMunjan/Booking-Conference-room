@@ -140,7 +140,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, defineComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
 
@@ -149,13 +149,22 @@ const router = useRouter()
 const me = ref(null)
 const loadedMe = ref(false)
 
+function decodeJwtPayloadSafe (token) {
+  try {
+    const part = token.split('.')[1] || ''
+    let b64 = part.replace(/-/g, '+').replace(/_/g, '/')
+    while (b64.length % 4 !== 0) b64 += '='
+    return JSON.parse(atob(b64))
+  } catch { return null }
+}
+
 const isAdmin = computed(() => {
   if (me.value && typeof me.value.isAdmin === 'boolean') return me.value.isAdmin
   // fallback จาก token (กรณี /auth/me ไม่มี isAdmin)
   try {
     const token = localStorage.getItem('access_token')
     if (!token) return false
-    const payload = JSON.parse(atob((token.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/')))
+    const payload = decodeJwtPayloadSafe(token)
     return !!(payload?.pos?.isAdmin || payload?.isAdmin)
   } catch { return false }
 })
@@ -200,20 +209,17 @@ function loanStatusTH(s) {
   }
 }
 
-/* --------------------- API ENDPOINTS ---------------------
-   ปรับ path ให้ตรง backend ของคุณได้เลย
----------------------------------------------------------- */
+/* --------------------- API ENDPOINTS --------------------- */
 async function fetchMe() {
   try {
-    const { data } = await api.get('/api/auth/me')
+    const { data } = await api.get('/api/auth/me') // ใช้ /api/... ตามโค้ดเดิมของคุณ
     me.value = { ...data, isAdmin: !!(data?.position?.isAdmin ?? data?.isAdmin) }
   } catch { me.value = null }
   finally { loadedMe.value = true }
 }
 
 async function fetchKPI() {
-  // รวม KPI เบื้องต้นจากการนับ bookings
-  const paramsBase = { page: 1, pageSize: 1 } // แค่ดึงรวม total ก็พอ (ถ้าหลังบ้านส่ง)
+  const paramsBase = { page: 1, pageSize: 1 }
   const [pending, approved] = await Promise.all([
     api.get('/api/bookings', { params: { ...paramsBase, status: 'AWAITING_ADMIN_APPROVAL' } }),
     api.get('/api/bookings', { params: { ...paramsBase, status: 'APPROVED' } })
@@ -223,17 +229,12 @@ async function fetchKPI() {
   const p = getTotal(pending)
   const a = getTotal(approved)
 
-  kpi.value = {
-    totalRequests: p + a,
-    approved: a,
-    pending: p
-  }
+  kpi.value = { totalRequests: p + a, approved: a, pending: p }
 }
 
 async function fetchPendingList() {
   pendingListLoading.value = true
   try {
-    // รวมหลายสถานะที่ยังรอแอดมิน (เผื่อหลังบ้านใช้สถานะก่อนหน้า)
     const paramsBase = { page: 1, pageSize: 50, sort: '-createdAt' }
     const [r1, r2] = await Promise.all([
       api.get('/api/bookings', { params: { ...paramsBase, status: 'AWAITING_ADMIN_APPROVAL' } }),
@@ -309,91 +310,101 @@ async function cancel(b) {
   await Promise.all([fetchKPI(), fetchPendingList()])
 }
 
+/* --------------------- Local components --------------------- */
+const KpiCard = defineComponent({
+  name: 'KpiCard',
+  props: {
+    title: { type: String, required: true },
+    value: { type: [Number, String], required: true },
+    color: { type: String, required: true } // 'blue' | 'green' | 'amber'
+  },
+  setup(props){
+    const colorClass = computed(() => ({
+      blue:  'bg-blue-600 text-white',
+      green: 'bg-green-500 text-white',
+      amber: 'bg-amber-400 text-white'
+    }[props.color] || 'bg-gray-600 text-white'))
+    return { colorClass, props }
+  },
+  template: `
+    <div class="rounded-xl overflow-hidden border">
+      <div :class="['px-5 py-3 text-sm font-medium', colorClass]">{{ props.title }}</div>
+      <div class="px-5 py-6 text-3xl font-semibold">{{ props.value ?? 0 }}</div>
+    </div>
+  `
+})
+
+const RowPlaceholder = defineComponent({
+  name: 'RowPlaceholder',
+  props: { text: { type: String, required: true } },
+  template: `<div class="px-4 py-6 text-center text-gray-500">{{ text }}</div>`
+})
+
+const SimpleRow = defineComponent({
+  name: 'SimpleRow',
+  props: {
+    title: { type: String, required: true },
+    subtitle: { type: String, default: '' },
+    meta: { type: String, default: '' }
+  },
+  template: `
+    <div class="px-4 py-3 flex items-center justify-between">
+      <div>
+        <div class="font-medium">{{ title }}</div>
+        <div v-if="subtitle" class="text-sm text-gray-600">{{ subtitle }}</div>
+      </div>
+      <div class="text-sm text-gray-500">{{ meta }}</div>
+    </div>
+  `
+})
+
+const AdminRow = defineComponent({
+  name: 'AdminRow',
+  emits: ['approve', 'cancel'],
+  props: { booking: { type: Object, required: true } },
+  methods: {
+    trange(s, e) {
+      const o = { hour: '2-digit', minute: '2-digit' }
+      return `${new Date(s).toLocaleTimeString([],o)} - ${new Date(e).toLocaleTimeString([],o)}`
+    },
+    dateTH(iso) {
+      const d = new Date(iso)
+      const m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+      return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}`
+    }
+  },
+  template: `
+    <div class="px-4 py-3 flex items-center gap-3">
+      <div class="w-12 text-center">
+        <div class="text-2xl leading-none font-semibold">{{ new Date(booking.startTime).getDate() }}</div>
+        <div class="text-xs text-gray-500">
+          {{ ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][new Date(booking.startTime).getMonth()] }}
+        </div>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="font-medium">{{ booking.room?.roomName || '-' }}</div>
+        <div class="text-sm text-gray-600">
+          เวลา {{ trange(booking.startTime, booking.endTime) }} · {{ dateTH(booking.startTime) }}
+        </div>
+        <div class="text-xs text-gray-500">ผู้จอง: {{ booking.bookedBy?.fullName || '-' }}</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700"
+                @click="$emit('approve')">อนุมัติ</button>
+        <button class="px-3 py-1 rounded border border-amber-300 text-amber-700 hover:bg-amber-50"
+                @click="$emit('cancel')">ยกเลิก</button>
+      </div>
+    </div>
+  `
+})
+
 /* --------------------- LIFECYCLE --------------------- */
 onMounted(async () => {
   await fetchMe()
   if (!isAdmin.value) {
-    // กันเข้าหน้าได้เฉพาะแอดมิน
     router.replace('/')
     return
   }
   await refreshAll()
 })
 </script>
-
-<!-- ============ tiny components ============ -->
-<script lang="ts">
-export default {}
-</script>
-
-<script setup name="KpiCard">
-const props = defineProps<{ title: string; value: number|string; color: 'blue'|'green'|'amber' }>()
-const colorClass = {
-  blue:  'bg-blue-600 text-white',
-  green: 'bg-green-500 text-white',
-  amber: 'bg-amber-400 text-white'
-}[props.color]
-</script>
-
-<template #KpiCard>
-  <div class="rounded-xl overflow-hidden border">
-    <div :class="['px-5 py-3 text-sm font-medium', colorClass]">{{ props.title }}</div>
-    <div class="px-5 py-6 text-3xl font-semibold">{{ props.value ?? 0 }}</div>
-  </div>
-</template>
-
-<script setup name="RowPlaceholder">
-const props = defineProps<{ text: string }>()
-</script>
-<template #RowPlaceholder>
-  <div class="px-4 py-6 text-center text-gray-500">{{ props.text }}</div>
-</template>
-
-<script setup name="SimpleRow">
-const props = defineProps<{ title: string; subtitle?: string; meta?: string }>()
-</script>
-<template #SimpleRow>
-  <div class="px-4 py-3 flex items-center justify-between">
-    <div>
-      <div class="font-medium">{{ props.title }}</div>
-      <div v-if="props.subtitle" class="text-sm text-gray-600">{{ props.subtitle }}</div>
-    </div>
-    <div class="text-sm text-gray-500">{{ props.meta }}</div>
-  </div>
-</template>
-
-<script setup name="AdminRow">
-const emit = defineEmits(['approve','cancel'])
-const props = defineProps<{ booking: any }>()
-function trange(s,e){
-  const o = { hour:'2-digit', minute:'2-digit' }
-  return `${new Date(s).toLocaleTimeString([],o)} - ${new Date(e).toLocaleTimeString([],o)}`
-}
-function dateTH(iso){
-  const d = new Date(iso); const m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-  return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}`
-}
-</script>
-
-
-<template #AdminRow>
-  <div class="px-4 py-3 flex items-center gap-3">
-    <div class="w-12 text-center">
-      <div class="text-2xl leading-none font-semibold">{{ new Date(props.booking.startTime).getDate() }}</div>
-      <div class="text-xs text-gray-500">{{ ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][new Date(props.booking.startTime).getMonth()] }}</div>
-    </div>
-    <div class="flex-1 min-w-0">
-      <div class="font-medium">{{ props.booking.room?.roomName || '-' }}</div>
-      <div class="text-sm text-gray-600">
-        เวลา {{ trange(props.booking.startTime, props.booking.endTime) }} · {{ dateTH(props.booking.startTime) }}
-      </div>
-      <div class="text-xs text-gray-500">ผู้จอง: {{ props.booking.bookedBy?.fullName || '-' }}</div>
-    </div>
-    <div class="flex items-center gap-2">
-      <button class="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700"
-              @click="emit('approve')">อนุมัติ</button>
-      <button class="px-3 py-1 rounded border border-amber-300 text-amber-700 hover:bg-amber-50"
-              @click="emit('cancel')">ยกเลิก</button>
-    </div>
-  </div>
-</template>

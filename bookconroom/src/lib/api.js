@@ -2,6 +2,7 @@
 import axios from "axios";
 
 const api = axios.create({
+  // แนวทาง A: baseURL ต้องรวม /api (เช่น http://localhost:3001/api)
   baseURL: import.meta?.env?.VITE_API_BASE_URL || "http://localhost:3001",
   withCredentials: false,
 });
@@ -26,7 +27,7 @@ api.interceptors.response.use(
       isRedirecting = true;
       // ล้าง token แล้วพาไปล็อกอิน
       localStorage.removeItem("access_token");
-      // เก็บ path เดิมไว้ ถ้าอยากเด้งกลับหลังล็อกอินเสร็จ
+      // เก็บ path เดิมไว้ ถ้าต้องการเด้งกลับหลังล็อกอิน
       const current = window.location.pathname + window.location.search;
       sessionStorage.setItem("post_login_redirect", current);
       window.location.href = "/login";

@@ -13,14 +13,15 @@ import BookingInfo from '../components/BookingInfo.vue'
 import BookCompleteInfo from '../components/BookCompleteInfo.vue'
 import AdminApprovals from '../components/AdminApprovals.vue'
 import MyInvites from '../components/MyInvites.vue'
-
-// ถ้าใช้แดชบอร์ดแอดมินตัวใหม่ ให้ uncomment บรรทัดนี้ แล้วใช้ route ด้านล่าง
+import UserProfile from '../components/UserProfile.vue'
+// ถ้าใช้แดชบอร์ดแอดมินตัวใหม่ ให้ uncomment 2 บรรทัดนี้
 // import AdminDashboard from '../pages/AdminDashboard.vue'
+// const AdminDashboardRoute = { path: '/admin/dashboard', component: AdminDashboard, meta: { requiresAuth: true, requiresAdmin: true } }
 
-// --- Routes + meta ---
 const routes = [
   { path: '/', redirect: '/home', meta: { requiresAuth: true } },
   { path: '/login', component: Loginpage },
+  { path: '/profile', component: UserProfile, meta: { requiresAuth: true } },
 
   { path: '/home', component: Home, meta: { requiresAuth: true } },
   { path: '/booking', component: Booking, meta: { requiresAuth: true } },
@@ -32,68 +33,62 @@ const routes = [
   { path: '/bookcompleteinfo', component: BookCompleteInfo, meta: { requiresAuth: true } },
 
   // --- เฉพาะแอดมิน ---
-  // 1) หน้าอนุมัติเดิม
   { path: '/admin/approvals', component: AdminApprovals, meta: { requiresAuth: true, requiresAdmin: true } },
-
-  // 2) แดชบอร์ดแอดมินใหม่ (ถ้าใช้ ให้ uncomment)
-  // { path: '/admin/dashboard', component: AdminDashboard, meta: { requiresAuth: true, requiresAdmin: true } },
+  // ถ้าใช้แดชบอร์ดใหม่ ให้ uncomment AdminDashboardRoute ด้านบน แล้วเติมบรรทัดนี้:
+  // AdminDashboardRoute,
 
   { path: '/my-invites', component: MyInvites, meta: { requiresAuth: true } },
-
-  // ให้ /booking-info/:id ก็เช็คล็อกอินด้วย
   { path: '/booking-info/:id', component: BookingInfo, meta: { requiresAuth: true } },
 
   // fallback
   { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
 
-// --- Router ---
 const router = createRouter({
   history: createWebHistory(),
   routes,
 })
 
-/**
- * ปลอดภัยกับ base64url (JWT) + padding
- * คืน payload object หรือ null
- */
+/** ปลอดภัยกับ base64url (JWT) + padding */
 function decodeJwtPayload(token) {
   try {
     const part = token.split('.')[1] || ''
-    // base64url -> base64
     let b64 = part.replace(/-/g, '+').replace(/_/g, '/')
-    // เติม padding ให้ครบหาร 4 ลงตัว
     while (b64.length % 4 !== 0) b64 += '='
-    const json = atob(b64)
-    return JSON.parse(json)
-  } catch {
-    return null
-  }
+    return JSON.parse(atob(b64))
+  } catch { return null }
 }
-
 function isLoggedIn() {
   return !!localStorage.getItem('access_token')
 }
-
-function isAdminFromToken() {
+function guessIsAdminFromToken() {
   const token = localStorage.getItem('access_token')
   if (!token) return false
-  const payload = decodeJwtPayload(token)
-  // รองรับหลายรูปแบบจาก backend
-  return !!(
-    payload?.pos?.isAdmin ||
-    payload?.isAdmin ||
-    (typeof payload?.role === 'string' && payload.role.toUpperCase() === 'ADMIN')
-  )
+  const p = decodeJwtPayload(token)
+  // backend ของคุณฝัง pos.isAdmin ใน token ตอน login
+  return p?.pos?.isAdmin === true
 }
 
-// --- Global guard ---
-router.beforeEach((to, from, next) => {
+// ---- Async admin check: เรียก backend ก่อน แล้วค่อย fallback JWT ----
+let meCache = null
+async function ensureMe() {
+  if (meCache !== null) return meCache
+  try {
+    const { default: api } = await import('@/lib/api.js')
+    // baseURL จาก api.js รวม /api แล้ว => ใช้ '/auth/me' ได้ตรงกับ /api/auth/me
+    const { data } = await api.get('/auth/me')
+    meCache = data || null
+  } catch {
+    meCache = null
+  }
+  return meCache
+}
+
+router.beforeEach(async (to, from, next) => {
   const authed = isLoggedIn()
 
   // ต้องล็อกอิน
   if (to.meta?.requiresAuth && !authed) {
-    // จำปลายทางไว้ แล้วไป login
     sessionStorage.setItem('post_login_redirect', to.fullPath)
     return next('/login')
   }
@@ -105,9 +100,13 @@ router.beforeEach((to, from, next) => {
     return next(back)
   }
 
-  // ต้องเป็นแอดมิน
-  if (to.meta?.requiresAdmin && !isAdminFromToken()) {
-    return next('/home')
+  // ต้องเป็นแอดมิน → เช็คกับ backend ก่อน
+  if (to.meta?.requiresAdmin) {
+    const me = await ensureMe()
+    const isAdmin =
+      !!(me?.isAdmin || me?.position?.isAdmin) || // /auth/me ของคุณส่ง isAdmin มาอยู่แล้ว
+      guessIsAdminFromToken()                      // fallback จาก JWT (pos.isAdmin)
+    if (!isAdmin) return next('/home')
   }
 
   next()

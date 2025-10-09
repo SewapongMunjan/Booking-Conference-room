@@ -7,6 +7,7 @@ import {
   InviteStatus,
   ServiceStatus,
   NoteQueueStatus,
+  Prisma
 } from "@prisma/client";
 
 const router = Router();
@@ -31,7 +32,7 @@ async function isRoomTimeBlocked(
       ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
       OR: [
         { startTime: { gte: start, lt: end } }, // เริ่มภายในช่วง
-        { endTime: { gt: start, lte: end } }, // สิ้นสุดภายในช่วง
+        { endTime: { gt: start, lte: end } },   // สิ้นสุดภายในช่วง
         { AND: [{ startTime: { lte: start } }, { endTime: { gte: end } }] }, // ครอบคลุมทั้งช่วง
       ],
     },
@@ -41,7 +42,6 @@ async function isRoomTimeBlocked(
 }
 
 /** helper: สร้างแจ้งเตือนให้หลายคน */
-import type { Prisma } from "@prisma/client";
 async function notifyMany(
   tx: Prisma.TransactionClient,
   userIds: number[],
@@ -226,15 +226,20 @@ router.post("/", auth, async (req, res) => {
 });
 
 /** ====== LIST BOOKINGS ======
- * GET /api/bookings?mine=1&status=APPROVED&start=ISO&end=ISO&page=1&pageSize=20&roomId=1&withInviteStats=1
+ * GET /api/bookings?mine=1&status=APPROVED&status_not=CANCELLED&status_in=A,B&start=ISO&end=ISO&start_gte=ISO&roomId=1&withInviteStats=1&page=1&pageSize=20
  */
 router.get("/", auth, async (req, res) => {
   try {
     const userId = req.user!.sub;
+
+    // ---- Query parsing ----
     const mine = req.query.mine === "1" || req.query.mine === "true";
     const status = (req.query.status as string) || undefined;
+    const status_not = (req.query.status_not as string) || undefined;                 // NEW
+    const status_in = (req.query.status_in as string) || undefined;                   // NEW (comma-separated)
     const start = (req.query.start as string) || undefined;
     const end = (req.query.end as string) || undefined;
+    const start_gte = (req.query.start_gte as string) || undefined;                   // NEW (สำหรับ recent)
     const withInviteStats =
       req.query.withInviteStats === "1" || req.query.withInviteStats === "true";
     const roomIdParam = req.query.roomId ? Number(req.query.roomId) : undefined;
@@ -245,11 +250,28 @@ router.get("/", auth, async (req, res) => {
       Math.max(1, parseInt((req.query.pageSize as string) || "20", 10))
     );
 
-    const where: any = {};
+    // ---- Build where ----
+    const where: Prisma.BookingWhereInput = {};
+
     if (mine) where.bookedById = userId;
-    if (status) where.status = status as BookingStatus;
     if (roomIdParam) where.roomId = roomIdParam;
 
+    // สถานะ: ตามลำดับความสำคัญ -> status > status_in > status_not > default(not CANCELLED)
+    if (status) {
+      where.status = status as BookingStatus;
+    } else if (status_in) {
+      const arr = status_in.split(",").map(s => s.trim()).filter(Boolean) as BookingStatus[];
+      if (arr.length) where.status = { in: arr };
+    } else if (status_not) {
+      where.status = { not: status_not as BookingStatus };
+    } else {
+      // ค่าเริ่มต้น: ไม่คืน CANCELLED
+      where.status = { not: BookingStatus.CANCELLED };
+    }
+
+    // เวลา:
+    // 1) หากมี start & end -> overlap ช่วง
+    // 2) หากมี start_gte อย่างเดียว -> startTime >= start_gte
     if (start && end) {
       const s = new Date(start);
       const e = new Date(end);
@@ -260,10 +282,15 @@ router.get("/", auth, async (req, res) => {
           { AND: [{ startTime: { lte: s } }, { endTime: { gte: e } }] },
         ];
       }
+    } else if (start_gte) {
+      const s = new Date(start_gte);
+      if (!isNaN(s.getTime())) {
+        where.startTime = { gte: s };
+      }
     }
 
     const orderBy =
-      roomIdParam && start && end
+      roomIdParam && (start || end)
         ? { startTime: "asc" as const }
         : { startTime: "desc" as const };
 
@@ -287,10 +314,7 @@ router.get("/", auth, async (req, res) => {
     ]);
 
     // รวมสรุปคำเชิญ (ถ้าขอมา)
-    let statsMap: Record<
-      number,
-      { INVITED?: number; ACCEPTED?: number; DECLINED?: number }
-    > = {};
+    let statsMap: Record<number, { INVITED?: number; ACCEPTED?: number; DECLINED?: number }> = {};
     if (withInviteStats && items.length) {
       const ids = items.map((b) => b.id);
       const stats = await prisma.bookingInvite.groupBy({
@@ -300,8 +324,7 @@ router.get("/", auth, async (req, res) => {
       });
       statsMap = stats.reduce((acc, row) => {
         const curr = acc[row.bookingId] || {};
-        curr[row.status as "INVITED" | "ACCEPTED" | "DECLINED"] =
-          row._count._all;
+        curr[row.status as "INVITED" | "ACCEPTED" | "DECLINED"] = row._count._all;
         acc[row.bookingId] = curr;
         return acc;
       }, {} as Record<number, any>);
