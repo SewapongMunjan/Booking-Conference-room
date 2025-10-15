@@ -57,18 +57,39 @@
               <div v-else class="divide-y">
                 <div
                   v-for="n in notifs"
-                  :key="n.id"
-                  class="p-3 hover:bg-gray-50 flex items-start gap-3"
+                   :key="n.id"
+                  class="p-3 hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                  role="button"
+                  tabindex="0"
+                  @click="goNotif(n)"
+                  @keydown.enter.space.prevent="goNotif(n)"
                 >
-                  <div class="text-xl leading-none">📣</div>
+                  <!-- ✅ ไอคอนตามชนิดแจ้งเตือน -->
+                  <div class="text-xl leading-none">
+                    <span v-if="n.type === 'APPROVED'">✅</span>
+                    <span v-else-if="n.type === 'REJECTED'">❌</span>
+                    <span v-else-if="n.type === 'CANCELED'">🚫</span>
+                    <span v-else-if="n.type === 'RESCHEDULED'">🕒</span>
+                    <span v-else-if="n.type === 'ISSUE_CREATED'">⚠️</span>
+                    <span v-else>📣</span>
+                  </div>
+
                   <div class="flex-1">
-                    <div class="text-sm" :class="n.isRead ? 'text-gray-600' : 'text-gray-900 font-medium'">
-                      {{ n.message }}
+                    <!-- ✅ แสดงหัวข้อ + ข้อความ (fallback) -->
+                    <div
+                      class="text-sm"
+                      :class="n.isRead ? 'text-gray-600' : 'text-gray-900 font-medium'"
+                    >
+                      {{ n.title || 'การแจ้งเตือน' }}
+                    </div>
+                    <div class="text-xs text-gray-600 whitespace-pre-line">
+                      {{ n.message || '-' }}
                     </div>
                     <div class="text-[11px] text-gray-500 mt-1">
                       {{ formatTime(n.createdAt) }}
                     </div>
                   </div>
+
                   <button
                     v-if="!n.isRead"
                     class="text-xs px-2 py-1 border rounded hover:bg-gray-50"
@@ -149,7 +170,7 @@
       <router-link to="/room-status" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
         <span class="text-lg">ℹ️</span> สถานะห้องประชุม
       </router-link>
-      <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+      <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colcolors">
         <span class="text-lg">⚠️</span> แจ้งปัญหา
       </router-link>
       <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg font-medium">
@@ -234,6 +255,10 @@
 <script setup>
 // News Card Slider State
 import { ref as vueRef, onMounted as vueOnMounted, onUnmounted as vueOnUnmounted } from 'vue'
+import axios from "axios";
+import { createSocket } from "@/plugins/socket";
+import useNotifications from "@/composables/useNotifications";
+
 const newsCards = [
   {
     img: 'https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?auto=format&fit=crop&w=900&q=80',
@@ -366,69 +391,86 @@ async function fetchMe () {
   } catch { me.value = null }
 }
 
-// ชื่อ state ให้ตรงกับ template
-const showNotif   = ref(false)
-const notifs      = ref([])      // [{id,message,isRead,createdAt}]
-const loadingNoti = ref(false)
-const errorNoti   = ref('')
+// ✅ ใช้ composable และ map ให้ตรงกับตัวแปรใน template
+const {
+  items: notifItems,
+  unreadCount: storeUnread,
+  loading: storeLoading,
+  error: storeError,
+  refresh, markAllRead, markRead,
+} = useNotifications();
 
-const unreadCount = computed(() => notifs.value.filter(n => !n.isRead).length)
+let socket = null;
 
+const showNotif = ref(false);
+const notifs = computed(() => notifItems.value);
+const unreadCount = computed(() => storeUnread.value);
+const loadingNoti = computed(() => storeLoading.value);
+const errorNoti = computed(() => storeError.value || "");
+
+// ฟอร์แมตเวลาแบบไทย
 function formatTime (iso) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const diff = Math.floor((Date.now() - d.getTime()) / 1000)
-  if (diff < 60) return `${diff}s ที่แล้ว`
-  const m = Math.floor(diff / 60)
-  if (m < 60) return `${m}m ที่แล้ว`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ที่แล้ว`
-  const days = Math.floor(h / 24)
-  return `${days}d ที่แล้ว`
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-async function fetchNotifications () {
-  loadingNoti.value = true
-  errorNoti.value = ''
-  try {
-    const { data } = await api.get('/api/notifications')
-    const list = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
-    notifs.value = list.map(n => ({
-      id: n.id,
-      message: n.message,
-      isRead: !!n.isRead,
-      createdAt: n.createdAt
-    }))
-  } catch (e) {
-    errorNoti.value = e?.response?.data?.error || 'โหลดการแจ้งเตือนไม่สำเร็จ'
-    notifs.value = []
-  } finally {
-    loadingNoti.value = false
+// ✅ map เส้นทางจาก refType/refId -> route ปลายทาง
+function resolveRouteByNotif(n) {
+  const refType = n && n.refType;
+  const refId = n && n.refId;
+
+  switch (refType) {
+    case 'BOOKING':
+      // ไปหน้า booking-info/:id ถ้ามี id, ถ้าไม่มี fallback ไปหน้า booking-info
+      if (refId) return { path: `/booking-info/${refId}` };
+      return { path: '/booking-info' };
+
+    case 'ISSUE':
+      // ตอนนี้คุณยังไม่มีหน้า issue detail แยก -> ส่งไปหน้า /report
+      // ถ้าอยากไฮไลต์ ticket ใด ticket หนึ่งแนบ query ไปด้วยได้
+      return refId
+        ? { path: '/report', query: { issueId: String(refId) } }
+        : { path: '/report' };
+
+    case 'INVITE':
+      return { path: '/my-invites' };
+
+    default:
+      return { path: '/home' };
   }
 }
 
-async function markAsRead (n) {
-  if (n.isRead) return
+// ฟังก์ชันสำหรับ template
+function toggleNotif() {
+  showNotif.value = !showNotif.value;
+  if (showNotif.value) refresh(); // โหลดรายการเมื่อเปิด
+}
+function refreshNotif() { return refresh(); }
+function markAllAsRead() { return markAllRead(); }
+function markAsRead(n) { return markRead(n.id); }
+
+// ✅ กดรายการ -> ทำอ่านแล้ว + ปิด dropdown + นำทาง
+async function goNotif(n) {
   try {
-    await api.patch(`/api/notifications/${n.id}/read`)
-    n.isRead = true
-  } catch {}
-}
+    const wasRead = !!n.isRead;
+    if (!wasRead) n.isRead = true; // optimistic UI
 
-async function markAllAsRead () {
-  if (!unreadCount.value) return
-  try {
-    await api.patch('/api/notifications/read-all')
-    notifs.value = notifs.value.map(n => ({ ...n, isRead: true }))
-  } catch {}
-}
+    await markRead(n.id);          // sync server + badge ใน store
+    showNotif.value = false;       // ปิด dropdown
 
-async function refreshNotif () {
-  await fetchNotifications()
-}
+    const target = resolveRouteByNotif(n);
+    // ถ้า booking แต่ไม่มี detail page อยากให้ไปไฮไลต์ในรายการ:
+    // const target = n.refType==='BOOKING' && n.refId
+    //   ? { path: '/booking-list', query: { focusId: String(n.refId) } }
+    //   : resolveRouteByNotif(n);
 
-function toggleNotif () {
-  showNotif.value = !showNotif.value
+    router.push(target);
+  } catch (e) {
+    // revert ถ้ามี error
+    n.isRead = false;
+    console.error(e);
+  }
 }
 
 // ปิด dropdown เมื่อคลิกนอก
@@ -450,9 +492,37 @@ onMounted(async () => {
   clockTimer = setInterval(updateDateTime, 1000)
 
   await fetchMe()
-  await fetchNotifications()
-  notiTimer = setInterval(fetchNotifications, 30000) // รีเฟรชทุก 30 วิ
+  await refresh() // โหลดชุดแรก + count
 
+  const token = localStorage.getItem('access_token')
+  if (token) {
+    socket = createSocket(token);
+    // มาใหม่ -> เติมหัวรายการ + เพิ่ม badge ถ้ายังไม่อ่าน
+    socket.on("notif:new", ({ item }) => {
+      notifItems.value = [item, ...notifItems.value].slice(0, 50);
+      if (!item.isRead) storeUnread.value = (storeUnread.value || 0) + 1;
+      playSound("/sounds/notif.mp3");
+      toast(`🔔 ${item.title}`, { description: item.message });
+    });
+    // อัปเดตรายการเดียว (เช่น mark read จากแท็บอื่น)
+    socket.on("notif:update", ({ id, patch }) => {
+      const idx = notifItems.value.findIndex(n => n.id === id);
+      if (idx !== -1) {
+        notifItems.value[idx] = Object.assign({}, notifItems.value[idx], patch || {});
+      }
+    });
+    // ทำทั้งหมดเป็นอ่านแล้วจากที่อื่น
+    socket.on("notif:update-all-read", () => {
+      notifItems.value = notifItems.value.map(n => Object.assign({}, n, { isRead: true }));
+    });
+    // อัปเดต badge ให้ตรงกับ server
+    socket.on("notif:badge", ({ count }) => {
+      storeUnread.value = typeof count === 'number' ? count : storeUnread.value;
+    });
+  }
+
+  // รีเฟรชทุก 30 วิ
+  notiTimer = setInterval(() => refresh(), 30000)
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -460,10 +530,10 @@ onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
   if (notiTimer)  clearInterval(notiTimer)
   document.removeEventListener('click', handleClickOutside)
+  if (socket) { socket.disconnect(); socket = null; }
 })
 </script>
 
 <style>
 /* Add any additional custom styles here */
 </style>
-

@@ -7,12 +7,14 @@ import {
   InviteStatus,
   ServiceStatus,
   NoteQueueStatus,
-  Prisma
+  Prisma,
+  NotifType,
+  RefType,
 } from "@prisma/client";
 
 const router = Router();
 
-/** ตรวจชนเวลาห้อง (มี option ข้าม bookingId เดิม เพื่อใช้ตอน approve) */
+/** ===== Helper: ตรวจชนเวลาห้อง (มี option ข้าม bookingId เดิม เพื่อใช้ตอน approve) */
 async function isRoomTimeBlocked(
   roomId: number,
   start: Date,
@@ -32,7 +34,7 @@ async function isRoomTimeBlocked(
       ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
       OR: [
         { startTime: { gte: start, lt: end } }, // เริ่มภายในช่วง
-        { endTime: { gt: start, lte: end } },   // สิ้นสุดภายในช่วง
+        { endTime: { gt: start, lte: end } }, // สิ้นสุดภายในช่วง
         { AND: [{ startTime: { lte: start } }, { endTime: { gte: end } }] }, // ครอบคลุมทั้งช่วง
       ],
     },
@@ -41,23 +43,64 @@ async function isRoomTimeBlocked(
   return overlapCount > 0;
 }
 
-/** helper: สร้างแจ้งเตือนให้หลายคน */
+/** ===== Helper: แปลงช่วงเวลาให้อ่านง่าย */
+function fmtRange(start: Date, end: Date) {
+  const s = new Date(start);
+  const e = new Date(end);
+  return `${s.toLocaleString()} - ${e.toLocaleString()}`;
+}
+
+/** ===== Helper: สร้าง payload Notification ให้ครบฟิลด์ */
+function makeNotif(input: {
+  userId: number;
+  message: string;
+  type?: NotifType;
+  title?: string;
+  refType?: RefType;
+  refId?: number | null;
+}) {
+  return {
+    userId: input.userId,
+    message: input.message,
+    type: input.type ?? NotifType.INVITE,
+    title: input.title ?? "Notification",
+    refType: input.refType,
+    refId: input.refId ?? null,
+  };
+}
+
+/** ===== Helper: สร้างแจ้งเตือนให้หลายคนแบบ createMany */
 async function notifyMany(
   tx: Prisma.TransactionClient,
   userIds: number[],
-  message: string
+  payload: {
+    message: string;
+    type?: NotifType;
+    title?: string;
+    refType?: RefType;
+    refId?: number | null;
+  }
 ) {
   if (!userIds?.length) return;
   await tx.notification.createMany({
-    data: userIds.map((uid) => ({ userId: uid, message })),
+    data: userIds.map((uid) =>
+      makeNotif({
+        userId: uid,
+        message: payload.message,
+        type: payload.type,
+        title: payload.title,
+        refType: payload.refType,
+        refId: payload.refId ?? null,
+      })
+    ),
     skipDuplicates: true,
   });
 }
 
 /** ====== CREATE BOOKING ====== */
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, async (req: any, res) => {
   try {
-    const userId = req.user!.sub;
+    const userId = Number(req.user!.sub);
     const {
       roomId,
       startTime,
@@ -154,12 +197,17 @@ router.post("/", auth, async (req, res) => {
             skipDuplicates: true,
           });
 
-          // 🔔 แจ้งเตือนผู้ถูกเชิญ
-          await notifyMany(
-            tx,
-            attendees.map((a) => a.id),
-            `คุณได้รับคำเชิญเข้าประชุม ห้อง ${room.roomName} เวลา ${s.toLocaleString()}`
-          );
+          // 🔔 แจ้งเตือนผู้ถูกเชิญ (INVITE)
+          await notifyMany(tx, attendees.map((a) => a.id), {
+            type: NotifType.INVITE,
+            title: "เชิญเข้าร่วมการประชุม",
+            message: `คุณได้รับคำเชิญเข้าประชุม ห้อง ${room.roomName} (${fmtRange(
+              s,
+              e
+            )})`,
+            refType: RefType.BOOKING,
+            refId: booking.id,
+          });
         }
       }
 
@@ -194,11 +242,16 @@ router.post("/", auth, async (req, res) => {
         });
 
         // 🔔 แจ้งผู้ถูกมอบหมายจดประชุม
-        await notifyMany(
-          tx,
-          notetakers.map((n) => n.userId),
-          `คุณถูกมอบหมายให้เป็นผู้จดประชุม ห้อง ${room.roomName} เวลา ${s.toLocaleString()}`
-        );
+        await notifyMany(tx, notetakers.map((n) => n.userId), {
+          type: NotifType.INVITE,
+          title: "มอบหมายให้จดประชุม",
+          message: `คุณถูกมอบหมายให้เป็นผู้จดประชุม ห้อง ${room.roomName} (${fmtRange(
+            s,
+            e
+          )})`,
+          refType: RefType.BOOKING,
+          refId: booking.id,
+        });
 
         // (C) หมุนคิวไปท้าย
         const maxOrder = await tx.noteTakerQueue.aggregate({
@@ -228,18 +281,18 @@ router.post("/", auth, async (req, res) => {
 /** ====== LIST BOOKINGS ======
  * GET /api/bookings?mine=1&status=APPROVED&status_not=CANCELLED&status_in=A,B&start=ISO&end=ISO&start_gte=ISO&roomId=1&withInviteStats=1&page=1&pageSize=20
  */
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, async (req: any, res) => {
   try {
-    const userId = req.user!.sub;
+    const userId = Number(req.user!.sub);
 
     // ---- Query parsing ----
     const mine = req.query.mine === "1" || req.query.mine === "true";
     const status = (req.query.status as string) || undefined;
-    const status_not = (req.query.status_not as string) || undefined;                 // NEW
-    const status_in = (req.query.status_in as string) || undefined;                   // NEW (comma-separated)
+    const status_not = (req.query.status_not as string) || undefined; // NEW
+    const status_in = (req.query.status_in as string) || undefined; // NEW (comma-separated)
     const start = (req.query.start as string) || undefined;
     const end = (req.query.end as string) || undefined;
-    const start_gte = (req.query.start_gte as string) || undefined;                   // NEW (สำหรับ recent)
+    const start_gte = (req.query.start_gte as string) || undefined; // NEW (สำหรับ recent)
     const withInviteStats =
       req.query.withInviteStats === "1" || req.query.withInviteStats === "true";
     const roomIdParam = req.query.roomId ? Number(req.query.roomId) : undefined;
@@ -260,7 +313,10 @@ router.get("/", auth, async (req, res) => {
     if (status) {
       where.status = status as BookingStatus;
     } else if (status_in) {
-      const arr = status_in.split(",").map(s => s.trim()).filter(Boolean) as BookingStatus[];
+      const arr = status_in
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean) as BookingStatus[];
       if (arr.length) where.status = { in: arr };
     } else if (status_not) {
       where.status = { not: status_not as BookingStatus };
@@ -314,7 +370,10 @@ router.get("/", auth, async (req, res) => {
     ]);
 
     // รวมสรุปคำเชิญ (ถ้าขอมา)
-    let statsMap: Record<number, { INVITED?: number; ACCEPTED?: number; DECLINED?: number }> = {};
+    let statsMap: Record<
+      number,
+      { INVITED?: number; ACCEPTED?: number; DECLINED?: number }
+    > = {};
     if (withInviteStats && items.length) {
       const ids = items.map((b) => b.id);
       const stats = await prisma.bookingInvite.groupBy({
@@ -324,7 +383,8 @@ router.get("/", auth, async (req, res) => {
       });
       statsMap = stats.reduce((acc, row) => {
         const curr = acc[row.bookingId] || {};
-        curr[row.status as "INVITED" | "ACCEPTED" | "DECLINED"] = row._count._all;
+        curr[row.status as "INVITED" | "ACCEPTED" | "DECLINED"] =
+          row._count._all;
         acc[row.bookingId] = curr;
         return acc;
       }, {} as Record<number, any>);
@@ -345,9 +405,9 @@ router.get("/", auth, async (req, res) => {
 /** ====== MY BOOKINGS (shortcut) ======
  * GET /api/bookings/my
  */
-router.get("/my", auth, async (req, res) => {
+router.get("/my", auth, async (req: any, res) => {
   try {
-    const userId = req.user!.sub;
+    const userId = Number(req.user!.sub);
     const items = await prisma.booking.findMany({
       where: { bookedById: userId },
       orderBy: { startTime: "desc" },
@@ -369,7 +429,7 @@ router.get("/my", auth, async (req, res) => {
 /** ====== GET DETAIL ======
  * GET /api/bookings/:id
  */
-router.get("/:id", auth, async (req, res) => {
+router.get("/:id", auth, async (req: any, res) => {
   try {
     const id = Number(req.params.id);
     const booking = await prisma.booking.findUnique({
@@ -399,15 +459,16 @@ router.get("/:id", auth, async (req, res) => {
 /** ====== INVITE: ACCEPT ======
  * POST /api/bookings/:id/confirm
  */
-router.post("/:id/confirm", auth, async (req, res) => {
+router.post("/:id/confirm", auth, async (req: any, res) => {
   try {
     const id = Number(req.params.id);
-    const userId = req.user!.sub;
+    const userId = Number(req.user!.sub);
 
     const invite = await prisma.bookingInvite.findFirst({
       where: { bookingId: id, userId },
     });
-    if (!invite) return res.status(404).json({ error: "No invite for this user" });
+    if (!invite)
+      return res.status(404).json({ error: "No invite for this user" });
 
     await prisma.bookingInvite.update({
       where: { id: invite.id },
@@ -421,10 +482,16 @@ router.post("/:id/confirm", auth, async (req, res) => {
     });
     if (b) {
       await prisma.notification.create({
-        data: {
+        data: makeNotif({
           userId: b.bookedBy.id,
-          message: `มีการยืนยันเข้าร่วมประชุม ห้อง ${b.room?.roomName ?? "-"} เวลา ${b.startTime.toLocaleString()}`,
-        },
+          type: NotifType.INVITE,
+          title: "มีผู้ยืนยันเข้าร่วม",
+          message: `มีการยืนยันเข้าร่วมประชุม ห้อง ${
+            b.room?.roomName ?? "-"
+          } (${b.startTime.toLocaleString()})`,
+          refType: RefType.BOOKING,
+          refId: b.id,
+        }),
       });
     }
 
@@ -449,15 +516,16 @@ router.post("/:id/confirm", auth, async (req, res) => {
 /** ====== INVITE: DECLINE ======
  * POST /api/bookings/:id/decline
  */
-router.post("/:id/decline", auth, async (req, res) => {
+router.post("/:id/decline", auth, async (req: any, res) => {
   try {
     const id = Number(req.params.id);
-    const userId = req.user!.sub;
+    const userId = Number(req.user!.sub);
 
     const invite = await prisma.bookingInvite.findFirst({
       where: { bookingId: id, userId },
     });
-    if (!invite) return res.status(404).json({ error: "No invite for this user" });
+    if (!invite)
+      return res.status(404).json({ error: "No invite for this user" });
 
     await prisma.bookingInvite.update({
       where: { id: invite.id },
@@ -471,10 +539,16 @@ router.post("/:id/decline", auth, async (req, res) => {
     });
     if (b) {
       await prisma.notification.create({
-        data: {
+        data: makeNotif({
           userId: b.bookedBy.id,
-          message: `มีผู้ปฏิเสธเข้าร่วมประชุม ห้อง ${b.room?.roomName ?? "-"} เวลา ${b.startTime.toLocaleString()}`,
-        },
+          type: NotifType.INVITE,
+          title: "มีผู้ปฏิเสธเข้าร่วม",
+          message: `มีผู้ปฏิเสธเข้าร่วมประชุม ห้อง ${
+            b.room?.roomName ?? "-"
+          } (${b.startTime.toLocaleString()})`,
+          refType: RefType.BOOKING,
+          refId: b.id,
+        }),
       });
     }
 
@@ -488,7 +562,7 @@ router.post("/:id/decline", auth, async (req, res) => {
 /** ====== ADMIN: APPROVE ======
  * POST /api/bookings/:id/approve
  */
-router.post("/:id/approve", auth, requireAdmin, async (req, res) => {
+router.post("/:id/approve", auth, requireAdmin, async (req: any, res) => {
   try {
     const id = Number(req.params.id);
     const booking = await prisma.booking.findUnique({
@@ -522,25 +596,39 @@ router.post("/:id/approve", auth, requireAdmin, async (req, res) => {
     });
 
     // 🔔 แจ้งผู้จอง + ผู้ถูกเชิญ + ผู้จดประชุม
+    const title = "การจองได้รับการอนุมัติ";
+    const msg = `การประชุมห้อง ${booking.room?.roomName ?? "-"} (${booking.startTime.toLocaleString()}) ได้รับการอนุมัติแล้ว`;
+
     await prisma.notification.create({
-      data: {
+      data: makeNotif({
         userId: booking.bookedBy.id,
-        message: `คำขอจองห้อง ${booking.room?.roomName ?? "-"} (${booking.startTime.toLocaleString()}) ได้รับการอนุมัติแล้ว`,
-      },
+        type: NotifType.APPROVED,
+        title,
+        message: msg,
+        refType: RefType.BOOKING,
+        refId: booking.id,
+      }),
     });
-    await prisma.notification.createMany({
-      data: [
-        ...booking.invites.map((i) => ({
-          userId: i.userId,
-          message: `การประชุมห้อง ${booking.room?.roomName ?? "-"} (${booking.startTime.toLocaleString()}) ได้รับการอนุมัติแล้ว`,
-        })),
-        ...booking.noteTakers.map((n) => ({
-          userId: n.userId,
-          message: `การประชุมห้อง ${booking.room?.roomName ?? "-"} (${booking.startTime.toLocaleString()}) ได้รับการอนุมัติแล้ว`,
-        })),
-      ],
-      skipDuplicates: true,
-    });
+
+    const audience = [
+      ...booking.invites.map((i) => i.userId),
+      ...booking.noteTakers.map((n) => n.userId),
+    ];
+    if (audience.length) {
+      await prisma.notification.createMany({
+        data: audience.map((uid) =>
+          makeNotif({
+            userId: uid,
+            type: NotifType.APPROVED,
+            title,
+            message: msg,
+            refType: RefType.BOOKING,
+            refId: booking.id,
+          })
+        ),
+        skipDuplicates: true,
+      });
+    }
 
     res.json({ booking: approved });
   } catch (e) {
@@ -554,7 +642,7 @@ router.post("/:id/approve", auth, requireAdmin, async (req, res) => {
  * เงื่อนไข: ผู้จองเอง หรือ admin
  * ผลพวง: เซ็ต Booking เป็น CANCELLED และ service ที่ค้างงาน → REJECTED
  */
-router.patch("/:id/cancel", auth, async (req, res) => {
+router.patch("/:id/cancel", auth, async (req: any, res) => {
   try {
     const id = Number(req.params.id);
     const me = req.user!; // { sub: number }
@@ -600,16 +688,21 @@ router.patch("/:id/cancel", auth, async (req, res) => {
       });
 
       // 🔔 แจ้งทุกคนว่าการประชุมถูกยกเลิก
-      const audience = [
-        booking.bookedBy.id,
-        ...booking.invites.map((i) => i.userId),
-        ...booking.noteTakers.map((n) => n.userId),
-      ];
-      await notifyMany(
-        tx,
-        Array.from(new Set(audience)),
-        `การประชุมห้อง ${booking.room?.roomName ?? "-"} (${booking.startTime.toLocaleString()}) ถูกยกเลิกแล้ว`
+      const audience = Array.from(
+        new Set([
+          booking.bookedBy.id,
+          ...booking.invites.map((i) => i.userId),
+          ...booking.noteTakers.map((n) => n.userId),
+        ])
       );
+
+      await notifyMany(tx, audience, {
+        type: NotifType.CANCELED,
+        title: "การประชุมถูกยกเลิก",
+        message: `การประชุมห้อง ${booking.room?.roomName ?? "-"} (${booking.startTime.toLocaleString()}) ถูกยกเลิกแล้ว`,
+        refType: RefType.BOOKING,
+        refId: booking.id,
+      });
 
       return b;
     });

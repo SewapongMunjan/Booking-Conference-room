@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "public"."Notification" ALTER COLUMN "type" DROP DEFAULT,
+ALTER COLUMN "title" DROP DEFAULT,
+ALTER COLUMN "readAt" SET DATA TYPE TIMESTAMP(3);
