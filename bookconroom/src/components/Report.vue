@@ -232,3 +232,96 @@
     </div>
   </div>
 </template>
+
+<script lang="ts">
+import { defineComponent, ref, computed, onMounted } from 'vue';
+
+interface Notif {
+  id: number;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export default defineComponent({
+  name: 'Report',
+  setup() {
+    const showNotif = ref(false);
+    const loadingNoti = ref(false);
+    const errorNoti = ref('');
+    const notifs = ref<Notif[]>([
+      { id: 1, message: 'ระบบจะมีการปิดปรับปรุง', isRead: false, createdAt: new Date().toISOString() },
+      { id: 2, message: 'การจองของคุณได้รับอนุมัติ', isRead: true, createdAt: new Date().toISOString() }
+    ]);
+
+    const me = ref<{ avatarUrl?: string } | null>({ avatarUrl: '' });
+
+    const toggleNotif = () => {
+      showNotif.value = !showNotif.value;
+      if (showNotif.value) {
+        fetchNotifs();
+      }
+    };
+
+    const fetchNotifs = async () => {
+      loadingNoti.value = true;
+      errorNoti.value = '';
+      try {
+        // simulate fetch delay; replace with real API call
+        await new Promise((r) => setTimeout(r, 300));
+      } catch (e: any) {
+        errorNoti.value = e?.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล';
+      } finally {
+        loadingNoti.value = false;
+      }
+    };
+
+    const refreshNotif = () => {
+      fetchNotifs();
+    };
+
+    const markAsRead = (n: Notif) => {
+      n.isRead = true;
+    };
+
+    const markAllAsRead = () => {
+      notifs.value.forEach((n) => (n.isRead = true));
+    };
+
+    const formatTime = (s: string) => {
+      try {
+        return new Date(s).toLocaleString();
+      } catch {
+        return s;
+      }
+    };
+
+    const unreadCount = computed(() => notifs.value.filter((n) => !n.isRead).length);
+
+    const logout = () => {
+      // implement real logout / navigation
+      console.log('logout');
+    };
+
+    onMounted(() => {
+      // initial load
+      fetchNotifs();
+    });
+
+    return {
+      showNotif,
+      loadingNoti,
+      errorNoti,
+      notifs,
+      me,
+      toggleNotif,
+      refreshNotif,
+      markAsRead,
+      markAllAsRead,
+      formatTime,
+      unreadCount,
+      logout
+    };
+  }
+});
+</script>
