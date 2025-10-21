@@ -5,11 +5,18 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 /**
  * โครงสร้างผู้ใช้ที่แนบเข้า req.user
  * - sub: userId (number)
- * - pos: meta จากตำแหน่ง (เช่น isAdmin)
+ * - pos: meta จากตำแหน่ง/สิทธิ์ (boolean flags) — อิงจากสคีมา Position
+ *   - isAdmin, isNoteManager, isNoteTaker
  */
+export interface RoleFlags {
+  isAdmin?: boolean;
+  isNoteManager?: boolean;
+  isNoteTaker?: boolean;
+}
+
 export interface AuthUser {
-  sub: number;                // userId
-  pos?: { isAdmin?: boolean } // อาจไม่ได้ใส่มาก็ได้
+  sub: number;        // userId
+  pos?: RoleFlags;    // อาจไม่ได้ใส่มาก็ได้
 }
 
 // เพิ่ม type ให้กับ Express.Request
@@ -43,7 +50,6 @@ export function auth(req: Request, res: Response, next: NextFunction) {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload | string;
 
     if (typeof decoded === "string") {
-      // กรณี payload เป็น string (ไม่คาดหวัง) → ไม่ยอมรับ
       return res.status(401).json({ error: "Invalid token payload" });
     }
 
@@ -60,8 +66,8 @@ export function auth(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ error: "Invalid token subject" });
     }
 
-    // รับ pos จาก payload ถ้ามี (เราแนะนำให้ฝั่ง login ยัด { pos: { isAdmin: boolean } } ลง token)
-    const pos = (decoded as any).pos as { isAdmin?: boolean } | undefined;
+    // รับ pos จาก payload ถ้ามี (ควรยัดจากตำแหน่งของ user ตอน login)
+    const pos = (decoded as any).pos as RoleFlags | undefined;
 
     req.user = { sub: subNum, pos };
     return next();
@@ -73,7 +79,6 @@ export function auth(req: Request, res: Response, next: NextFunction) {
 /**
  * requireAdmin
  * - อนุญาตเฉพาะผู้ใช้ที่ token มี pos.isAdmin === true
- * - ถ้าไม่ได้ใส่ pos ใน token ให้พิจารณาไปเสริมในขั้นตอน login (ดูตัวอย่างด้านล่าง)
  */
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.user?.pos?.isAdmin) {
@@ -83,7 +88,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 /**
- * (ออปชัน) เผื่อใช้ในบางจุด: เจ้าของทรัพยากรเองหรือแอดมินเท่านั้น
+ * (ออปชัน) เจ้าของทรัพยากรเองหรือแอดมินเท่านั้น
  */
 export function requireSelfOrAdmin(getOwnerId: (req: Request) => number | undefined) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -102,12 +107,21 @@ export function requireSelfOrAdmin(getOwnerId: (req: Request) => number | undefi
 
 /**
  * isNotetaker middleware
- * - อนุญาตเฉพาะผู้ใช้ที่มี pos: NoteTaker หรือ pos: Backup NoteTaker
+ * - อนุญาต NoteTaker / NoteManager / Admin
+ * - ไม่มี flag isBackupNoteTaker ในสคีมา: บทบาทสำรองให้แยกตรวจที่ระดับ Booking ผ่าน roleIndex ของ BookingNoteTaker
  */
 export function isNotetaker(req: Request, res: Response, next: NextFunction) {
-  const pos = req.user?.pos; // Access pos directly
-  if (!pos || (pos !== 'NoteTaker' && pos !== 'Backup NoteTaker')) {
+  const flags = req.user?.pos;
+
+  const canTakeNotes = !!(
+    flags?.isAdmin ||
+    flags?.isNoteManager ||
+    flags?.isNoteTaker
+  );
+
+  if (!canTakeNotes) {
     return res.status(403).json({ error: "Notetaker only" });
   }
+
   return next();
 }
