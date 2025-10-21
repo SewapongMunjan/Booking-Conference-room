@@ -1,331 +1,444 @@
 <template>
-  
-  <div class="min-h-screen bg-gray-100">
+  <div class="min-h-screen bg-gray-50">
+    <!-- Fixed Left Sidebar - Hidden on mobile -->
+    <aside class="hidden lg:block fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-200 z-50">
+      <div class="h-full flex flex-col">
+        <!-- Logo Section -->
+        <div class="p-4 border-b border-gray-200">
+          <div class="flex items-center gap-2">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-xl shadow-md">
+              🏢
+            </div>
+            <div>
+              <h3 class="font-semibold text-gray-900 text-sm">ระบบจองห้องประชุม</h3>
+              <p class="text-[10px] text-gray-500">Meeting Room System</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
+          <router-link to="/" class="nav-link" :class="$route.path === '/' ? 'nav-active' : ''">
+            <span class="text-lg">🏠</span>
+            <span class="text-sm">หน้าแรก</span>
+          </router-link>
+          <router-link to="/booking" class="nav-link" :class="$route.path.startsWith('/booking') ? 'nav-active' : ''">
+            <span class="text-lg">📅</span>
+            <span class="text-sm">จองห้องประชุม</span>
+          </router-link>
+          <router-link to="/booking-list" class="nav-link" :class="$route.path === '/booking-list' ? 'nav-active' : ''">
+            <span class="text-lg">📋</span>
+            <span class="text-sm">รายการจองของฉัน</span>
+          </router-link>
+          <router-link to="/room-use" class="nav-link" :class="$route.path === '/room-use' ? 'nav-active' : ''">
+            <span class="text-lg">🗂️</span>
+            <span class="text-sm">ตารางการใช้ห้อง</span>
+          </router-link>
+          <router-link to="/room-status" class="nav-link" :class="$route.path === '/room-status' ? 'nav-active' : ''">
+            <span class="text-lg">ℹ️</span>
+            <span class="text-sm">สถานะห้องประชุม</span>
+          </router-link>
+          <router-link to="/report" class="nav-link" :class="$route.path === '/report' ? 'nav-active' : ''">
+            <span class="text-lg">⚠️</span>
+            <span class="text-sm">แจ้งปัญหา</span>
+          </router-link>
+          <router-link to="/my-invites" class="nav-link" :class="$route.path === '/my-invites' ? 'nav-active' : ''">
+            <span class="text-lg">📨</span>
+            <span class="text-sm">คำเชิญของฉัน</span>
+          </router-link>
+        </nav>
+
+        <!-- Footer -->
+        <div class="p-3 border-t border-gray-200">
+          <div class="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
+            <img :src="me?.avatarUrl || 'https://cdn-icons-png.flaticon.com/128/456/456283.png'" class="w-9 h-9 rounded-lg" />
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-xs text-gray-900 truncate">{{ me?.name || 'ผู้ใช้' }}</div>
+              <div class="text-[10px] text-gray-500 truncate">{{ me?.email || '' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
     <!-- Header -->
-    <header class="bg-white px-8 py-4 shadow-sm border-b">
-  <div class="w-full px-6 mx-auto flex justify-between items-center">
-    <!-- Left -->
-    <div>
-      <h2 class="text-lg font-semibold text-blue-600 m-0">ระบบจองห้องประชุม</h2>
-      <p class="text-sm text-gray-600 m-0">Meeting Room Booking System</p>
-    </div>
+    <header class="fixed top-0 right-0 left-0 lg:left-64 z-40 bg-white border-b border-gray-200">
+      <div class="w-full px-8 py-4 flex justify-between items-center">
+        <!-- Left -->
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-lg lg:hidden">
+            🏢
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900 m-0">
+              ระบบจองห้องประชุม
+            </h2>
+            <p class="text-xs text-gray-500 m-0 hidden sm:block lg:hidden">Meeting Room Booking System</p>
+          </div>
+        </div>
 
-
-    <!-- Right -->
-    <div class="flex items-center gap-3 relative">
-      <!-- Notifications -->
-      <div class="relative">
-        <button
-  data-noti-bell
-  class="w-10 h-10 rounded-full flex items-center justify-center border hover:bg-gray-50 relative"
-  @click="toggleNotif"
-  aria-label="เปิดการแจ้งเตือน"
->
-  <img
-    src="https://cdn-icons-png.flaticon.com/128/1827/1827370.png"
-    alt="กระดิ่งแจ้งเตือน"
-    class="w-5 h-5 object-contain"
-    loading="lazy"
-  />
-  <span
-    v-if="unreadCount > 0"
-    class="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-600 text-white text-[11px] leading-5 text-center"
-  >
-    {{ unreadCount > 9 ? '9+' : unreadCount }}
-  </span>
-</button>
-
-        <!-- Dropdown -->
-       <div
-  v-if="showNotif"
-  data-noti-dropdown                     
-  class="absolute right-0 mt-2 w-80 bg-white border rounded-xl shadow-lg z-50"
->
-          <div class="p-3 border-b flex items-center gap-2">
-            <span class="font-medium">การแจ้งเตือน</span>
-            <span class="ml-auto text-xs text-gray-500">ยังไม่อ่าน: {{ unreadCount }}</span>
+        <!-- Right -->
+        <div class="flex items-center gap-3">
+          <!-- Search -->
+          <div class="hidden lg:block relative">
+            <input 
+              type="search" 
+              placeholder="ค้นหา..." 
+              class="w-64 pl-10 pr-4 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            />
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
           </div>
 
-          <div class="max-h-80 overflow-auto">
-            <div v-if="loadingNoti" class="p-4 text-sm text-gray-500">กำลังโหลด...</div>
-            <div v-else-if="errorNoti" class="p-4 text-sm text-red-600">{{ errorNoti }}</div>
+          <!-- Mobile Menu Toggle -->
+          <button @click="showMobileMenu = !showMobileMenu" class="lg:hidden w-10 h-10 rounded-lg flex items-center justify-center hover:bg-gray-100">
+            <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+          </button>
 
-            <template v-else>
-              <div v-if="notifs.length === 0" class="p-4 text-sm text-gray-500">
-                ยังไม่มีการแจ้งเตือน
-              </div>
-              <div v-else class="divide-y">
-                <div
-                  v-for="n in notifs"
-                   :key="n.id"
-                  class="p-3 hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
-                  role="button"
-                  tabindex="0"
-                  @click="goNotif(n)"
-                  @keydown.enter.space.prevent="goNotif(n)"
-                >
-                  <!-- ✅ ไอคอนตามชนิดแจ้งเตือน -->
-                  <div class="text-xl leading-none">
-                    <span v-if="n.type === 'APPROVED'">✅</span>
-                    <span v-else-if="n.type === 'REJECTED'">❌</span>
-                    <span v-else-if="n.type === 'CANCELED'">🚫</span>
-                    <span v-else-if="n.type === 'RESCHEDULED'">🕒</span>
-                    <span v-else-if="n.type === 'ISSUE_CREATED'">⚠️</span>
-                    <span v-else>📣</span>
+          <!-- Notifications -->
+          <div class="relative">
+            <button
+              data-noti-bell
+              class="w-10 h-10 rounded-lg flex items-center justify-center hover:bg-gray-100 relative"
+              @click="toggleNotif"
+            >
+              <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+              </svg>
+              <span
+                v-if="unreadCount > 0"
+                class="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center"
+              >
+                {{ unreadCount > 9 ? '9+' : unreadCount }}
+              </span>
+            </button>
+
+            <!-- Dropdown -->
+            <div
+              v-if="showNotif"
+              data-noti-dropdown
+              class="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 mt-2 sm:w-96 bg-white border border-gray-200 rounded-xl shadow-xl z-50"
+            >
+              <div class="p-3 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-semibold text-gray-900">การแจ้งเตือน</span>
+                    <span class="px-2 py-0.5 rounded-full bg-blue-500 text-white text-xs font-medium">{{ unreadCount }}</span>
                   </div>
-
-                  <div class="flex-1">
-                    <!-- ✅ แสดงหัวข้อ + ข้อความ (fallback) -->
-                    <div
-                      class="text-sm"
-                      :class="n.isRead ? 'text-gray-600' : 'text-gray-900 font-medium'"
-                    >
-                      {{ n.title || 'การแจ้งเตือน' }}
-                    </div>
-                    <div class="text-xs text-gray-600 whitespace-pre-line">
-                      {{ n.message || '-' }}
-                    </div>
-                    <div class="text-[11px] text-gray-500 mt-1">
-                      {{ formatTime(n.createdAt) }}
-                    </div>
-                  </div>
-
-                  <button
-                    v-if="!n.isRead"
-                    class="text-xs px-2 py-1 border rounded hover:bg-gray-50"
-                    @click.stop="markAsRead(n)"
-                    title="ทำเครื่องหมายว่าอ่านแล้ว"
-                  >
-                    อ่านแล้ว
+                  <button @click="showNotif=false" class="w-6 h-6 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                   </button>
                 </div>
               </div>
-            </template>
+
+              <div class="max-h-[60vh] sm:max-h-80 overflow-y-auto">
+                <div v-if="loadingNoti" class="p-6 text-center">
+                  <div class="inline-block w-8 h-8 border-3 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+                  <p class="text-xs text-gray-500 mt-2">กำลังโหลด...</p>
+                </div>
+
+                <template v-else>
+                  <div v-if="notifs.length === 0" class="p-8 text-center">
+                    <div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                      <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                    </div>
+                    <p class="text-xs text-gray-500 font-medium">ไม่มีการแจ้งเตือน</p>
+                  </div>
+                  <div v-else class="divide-y divide-gray-100">
+                    <div
+                      v-for="n in notifs"
+                      :key="n.id"
+                      class="p-3 hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                      @click="goNotif(n)"
+                    >
+                      <div class="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" :class="n.isRead ? 'bg-gray-100' : 'bg-blue-50'">
+                        <span v-if="n.type === 'APPROVED'">✅</span>
+                        <span v-else-if="n.type === 'REJECTED'">❌</span>
+                        <span v-else>📣</span>
+                      </div>
+
+                      <div class="flex-1 min-w-0">
+                        <div class="text-xs font-medium" :class="n.isRead ? 'text-gray-600' : 'text-gray-900'">
+                          {{ n.title || 'การแจ้งเตือน' }}
+                        </div>
+                        <div class="text-[11px] text-gray-500 mt-0.5">
+                          {{ n.message || '-' }}
+                        </div>
+                        <div class="text-[9px] text-gray-400 mt-1">
+                          {{ formatTime(n.createdAt) }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              <div class="p-2 border-t border-gray-100 flex gap-2">
+                <button class="flex-1 text-[10px] px-2 py-1.5 hover:bg-gray-50 border border-gray-200 rounded-lg font-medium" @click="refreshNotif">
+                  🔄 รีเฟรช
+                </button>
+                <button class="flex-1 text-[10px] px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium disabled:opacity-50" @click="markAllAsRead" :disabled="unreadCount===0">
+                  ✓ อ่านทั้งหมด
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div class="p-3 border-t flex items-center gap-2">
-            <button
-              class="text-sm px-3 py-2 border rounded hover:bg-gray-50"
-              @click="refreshNotif"
-            >
-              รีเฟรช
-            </button>
-            <button
-              class="text-sm px-3 py-2 border rounded hover:bg-gray-50"
-              @click="markAllAsRead"
-              :disabled="unreadCount===0"
-            >
-              ทำเครื่องหมายทั้งหมดว่าอ่านแล้ว
-            </button>
-            <button
-              class="ml-auto text-sm px-3 py-2 border rounded hover:bg-gray-50"
-              @click="showNotif=false"
-            >
-              ปิด
-            </button>
-          </div>
+          <!-- Profile -->
+          <router-link to="/profile" class="hidden sm:block">
+            <div class="w-10 h-10 rounded-lg overflow-hidden border-2 border-transparent hover:border-blue-500">
+              <img :src="me?.avatarUrl || 'https://cdn-icons-png.flaticon.com/128/456/456283.png'" class="w-full h-full object-cover" />
+            </div>
+          </router-link>
+
+          <!-- Logout -->
+          <button @click="logout" class="hidden sm:block px-4 py-2.5 hover:bg-gray-100 rounded-lg text-sm font-medium text-gray-700">
+            ออกจากระบบ
+          </button>
         </div>
       </div>
+    </header>
 
-      <!-- Avatar + Logout -->
-      <!-- Avatar (click -> /profile) + Logout -->
-       <router-link
-          to="/profile"
-          class="shrink-0 inline-block rounded-full focus:outline-none focus:ring-2 focus:ring-blue-600"
-          title="ดูโปรไฟล์"
-        >
-      <img
-          :src="me?.avatarUrl || 'https://cdn-icons-png.flaticon.com/128/456/456283.png'"
-          alt="เปิดโปรไฟล์"
-          class="w-10 h-10 rounded-full border-2 border-gray-300 cursor-pointer hover:ring-2 hover:ring-blue-500"
-      />
-        </router-link>
-
-        <button
-          @click="logout"
-            class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-          >
-         ออกจากระบบ
-        </button>
+    <!-- Mobile Menu -->
+    <div v-if="showMobileMenu" class="lg:hidden fixed inset-0 z-50 bg-black/20" @click="showMobileMenu = false">
+      <div class="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl" @click.stop>
+        <div class="p-4 border-b">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-gray-900 text-sm">เมนู</h3>
+            <button @click="showMobileMenu = false" class="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <router-link to="/profile" class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+            <img :src="me?.avatarUrl || 'https://cdn-icons-png.flaticon.com/128/456/456283.png'" class="w-9 h-9 rounded-lg" />
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-xs text-gray-900 truncate">{{ me?.name || 'ผู้ใช้' }}</div>
+              <div class="text-[10px] text-gray-500">ดูโปรไฟล์</div>
+            </div>
+          </router-link>
+        </div>
+        <nav class="p-2 space-y-1">
+          <router-link to="/" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">🏠</span> <span class="text-sm">หน้าแรก</span>
+          </router-link>
+          <router-link to="/booking" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">📅</span> <span class="text-sm">จองห้องประชุม</span>
+          </router-link>
+          <router-link to="/booking-list" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">📋</span> <span class="text-sm">รายการจองของฉัน</span>
+          </router-link>
+          <router-link to="/room-use" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">🗂️</span> <span class="text-sm">ตารางการใช้ห้อง</span>
+          </router-link>
+          <router-link to="/room-status" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">ℹ️</span> <span class="text-sm">สถานะห้องประชุม</span>
+          </router-link>
+          <router-link to="/report" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">⚠️</span> <span class="text-sm">แจ้งปัญหา</span>
+          </router-link>
+          <router-link to="/my-invites" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">📨</span> <span class="text-sm">คำเชิญของฉัน</span>
+          </router-link>
+        </nav>
+        <div class="p-3 border-t absolute bottom-0 left-0 right-0 bg-white">
+          <button @click="logout" class="w-full px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100">
+            ออกจากระบบ
+          </button>
+        </div>
+      </div>
     </div>
-  </div>
-</header>
 
-<div class="w-full px-6 ml-0 mr-auto flex gap-6 py-6">
-  <!-- Sidebar -->
-  <aside class="w-64 bg-white rounded-xl shadow-sm p-4">
-    <nav class="flex flex-col gap-2">
-      <router-link to="/" class="flex items-center gap-3 px-4 py-3 text-white bg-blue-600 rounded-lg font-medium">
-        <span class="text-lg">🏠</span> หน้าแรก
-      </router-link>
-      <router-link to="/booking" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-        <span class="text-lg">📅</span> จองห้องประชุม
-      </router-link>
-      <router-link to="/booking-list" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-        <span class="text-lg">📋</span> รายการจองของฉัน
-      </router-link>
-      <router-link to="/room-use" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-        <span class="text-lg">🗂️</span> ตารางการใช้ห้องประชุม
-      </router-link>
-      <router-link to="/room-status" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
-        <span class="text-lg">ℹ️</span> สถานะห้องประชุม
-      </router-link>
-      <router-link to="/report" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colcolors">
-        <span class="text-lg">⚠️</span> แจ้งปัญหา
-      </router-link>
-      <router-link to="/admin/approvals" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg font-medium">
-        <span class="text-lg">🛡️</span> อนุมัติการจอง (Admin)
-      </router-link>
-      <router-link to="/my-invites" class="flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-100 rounded-lg hover:bg-blue-200">
-        <span class="text-lg">📨</span> คำเชิญของฉัน
-      </router-link>
-    </nav>
-  </aside>
+    <!-- Main content -->
+    <div class="lg:ml-64 pt-20">
+      <main class="w-full h-[calc(100vh-5rem)] px-8 py-6 overflow-y-auto">
+        <div class="max-w-full space-y-6">
+          <!-- Hero Card -->
+          <section class="rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 p-10 text-white shadow-lg">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 bg-white/20 rounded-full text-sm font-medium mb-5">
+              <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+              ระบบพร้อมใช้งาน
+            </div>
+            <h1 class="text-4xl font-bold mb-4 leading-tight">
+              จองห้องประชุม<br/>ได้ทุกที่ ทุกเวลา
+            </h1>
+            <p class="text-blue-100 text-base mb-6 max-w-xl">
+              ระบบจองห้องประชุมอัจฉริยะ พร้อมแจ้งเตือนแบบเรียลไทม์
+            </p>
+            <div class="flex gap-4">
+              <RouterLink to="/booking" class="px-6 py-3 bg-white text-blue-600 rounded-xl text-base font-semibold hover:bg-blue-50 shadow-md hover:shadow-lg transition-all">
+                📅 จองเลย
+              </RouterLink>
+              <button class="px-6 py-3 bg-white/20 text-white rounded-xl text-base font-semibold hover:bg-white/30 border-2 border-white/30 backdrop-blur-sm transition-all">
+                📚 เรียนรู้เพิ่มเติม
+              </button>
+            </div>
+          </section>
 
-  <!-- Main: FULL-WIDTH CONTENT COLUMN -->
-  <main class="flex-1 space-y-6">
-    <!-- บล็อกหัวเรื่อง/ประกาศ: กินเต็มแถว -->
-    <section class="w-full bg-white rounded-xl shadow-sm p-5">
-      <div class="flex items-center gap-3">
-        <div class="bg-blue-600 text-white w-12 h-12 rounded-xl flex items-center justify-center text-xl">🏠</div>
-        <div>
-          <h3 class="m-0 text-xl font-semibold text-blue-600">หน้าแรก</h3>
-          <p class="m-0 text-sm text-gray-500">ระบบจองห้องประชุม</p>
-        </div>
-      </div>
-    </section>
+          <!-- Stats Cards - สถิติวันนี้ -->
+          <section>
+            <div class="flex items-center justify-between mb-6">
+              <h2 class="text-2xl font-semibold text-gray-900">สถิติการจอง - วันนี้ {{ currentDate }} {{ currentMonth }} {{ currentYear }}</h2>
+              <span class="text-sm text-gray-500 flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                อัปเดต: {{ currentTime }}
+              </span>
+            </div>
+            
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              <div class="stat-card bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 shadow-md hover:shadow-lg transition-shadow">
+                <div class="flex items-center justify-between mb-4">
+                  <span class="text-base font-medium text-blue-700">ทั้งหมด</span>
+                  <div class="w-14 h-14 rounded-xl bg-blue-500 flex items-center justify-center text-2xl shadow-sm">📊</div>
+                </div>
+                <div class="text-5xl font-bold text-blue-700 mb-2">0</div>
+                <div class="text-sm text-blue-600">การจองทั้งหมด</div>
+              </div>
 
-    <!-- Hero/ประชาสัมพันธ์: กริด 12 คอลัมน์ ยืดเต็ม -->
-    <section class="w-full bg-white rounded-xl shadow-sm p-0">
-      <div class="grid grid-cols-12 gap-0 md:gap-6">
-        <!-- รูปภาพ -->
-        <div class="col-span-12 md:col-span-6">
-          <img
-            src="https://t4.ftcdn.net/jpg/00/80/91/11/360_F_80911186_RoBCsyLrNTrG7Y1EOyCsaCJO5DyHgTox.jpg"
-            alt="hero"
-            class="w-full h-[260px] md:h-[360px] object-cover rounded-t-xl md:rounded-l-xl md:rounded-tr-none"
-          />
-        </div>
-        <!-- ข้อความ/ปุ่ม -->
-        <div class="col-span-12 md:col-span-6 p-6 flex flex-col justify-center">
-          <h2 class="text-2xl md:text-3xl font-semibold text-gray-900 leading-snug">
-            จองห้องประชุมได้ทุกที่ ทุกเวลา
-          </h2>
-          <p class="mt-3 text-gray-600">
-            รองรับการจองผ่านมือถือและคอมพิวเตอร์ สะดวก รวดเร็ว พร้อมระบบเตือนกำหนดการแบบเรียลไทม์
-          </p>
-          <div class="mt-5 flex flex-wrap gap-3">
-            <router-link
-              to="/booking"
-              class="inline-flex items-center justify-center px-5 py-2 rounded-full bg-blue-600 text-white hover:bg-blue-700"
-            >จองห้องประชุม</router-link>
-            <router-link
-              to="/booking-list"
-              class="inline-flex items-center justify-center px-5 py-2 rounded-full bg-gray-100 text-gray-800 hover:bg-gray-200"
-            >ดูห้องว่าง</router-link>
+              <div class="stat-card bg-gradient-to-br from-green-50 to-green-100 border-green-200 shadow-md hover:shadow-lg transition-shadow">
+                <div class="flex items-center justify-between mb-4">
+                  <span class="text-base font-medium text-green-700">อนุมัติแล้ว</span>
+                  <div class="w-14 h-14 rounded-xl bg-green-500 flex items-center justify-center text-2xl shadow-sm">✅</div>
+                </div>
+                <div class="text-5xl font-bold text-green-700 mb-2">0</div>
+                <div class="text-sm text-green-600 flex items-center gap-1">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                  <span>ยืนยันแล้ว</span>
+                </div>
+              </div>
+
+              <div class="stat-card bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200 shadow-md hover:shadow-lg transition-shadow">
+                <div class="flex items-center justify-between mb-4">
+                  <span class="text-base font-medium text-amber-700">รออนุมัติ</span>
+                  <div class="w-14 h-14 rounded-xl bg-amber-500 flex items-center justify-center text-2xl shadow-sm">⏳</div>
+                </div>
+                <div class="text-5xl font-bold text-amber-700 mb-2">0</div>
+                <div class="text-sm text-amber-600">รอดำเนินการ</div>
+              </div>
+
+              <div class="stat-card bg-gradient-to-br from-red-50 to-red-100 border-red-200 shadow-md hover:shadow-lg transition-shadow">
+                <div class="flex items-center justify-between mb-4">
+                  <span class="text-base font-medium text-red-700">ยกเลิก</span>
+                  <div class="w-14 h-14 rounded-xl bg-red-500 flex items-center justify-center text-2xl shadow-sm">❌</div>
+                </div>
+                <div class="text-5xl font-bold text-red-700 mb-2">0</div>
+                <div class="text-sm text-red-600">ถูกยกเลิก</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Main Grid -->
+          <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <!-- Left Column -->
+            <div class="xl:col-span-2 space-y-6">
+              <!-- Usage Chart -->
+              <div class="modern-card shadow-md">
+                <div class="flex items-center justify-between mb-6">
+                  <div>
+                    <h4 class="font-semibold text-gray-900 text-lg">การใช้งานห้องประชุม</h4>
+                    <p class="text-sm text-gray-500 mt-1">สถิติ 7 วันล่าสุด</p>
+                  </div>
+                </div>
+                <div class="h-64 flex items-end gap-4">
+                  <div v-for="i in 7" :key="i" class="flex-1">
+                    <div class="bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-xl hover:from-blue-600 hover:to-blue-500 cursor-pointer transition-all shadow-sm" :style="{height: (20 + i * 10) + '%'}"></div>
+                    <div class="text-center text-sm text-gray-500 font-medium mt-3">
+                      {{ ['อา','จ','อ','พ','พฤ','ศ','ส'][i-1] }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Upcoming Bookings -->
+              <div class="modern-card shadow-md">
+                <div class="flex items-center justify-between mb-5">
+                  <h4 class="font-semibold text-gray-900 text-lg">การจองล่าสุด</h4>
+                  <RouterLink to="/booking-list" class="text-sm font-medium text-blue-600 hover:text-blue-700">ดูทั้งหมด →</RouterLink>
+                </div>
+                <div class="p-5 bg-gray-50 rounded-xl shadow-inner">
+                  <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-2xl shrink-0 shadow-md">
+                      🏢
+                    </div>
+                    <div class="flex-1">
+                      <div class="font-semibold text-gray-900 text-base">Room-30A</div>
+                      <div class="text-sm text-gray-500 mt-1">09:00 AM - 06:00 PM</div>
+                      <div class="text-sm text-gray-500">31 ตุลาคม 2568</div>
+                    </div>
+                    <span class="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-500 text-white shadow-sm">จอง</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="space-y-6">
+              <!-- Calendar -->
+              <div class="modern-card shadow-md">
+                <div class="flex items-center justify-between mb-4">
+                  <h4 class="font-semibold text-gray-900 text-base">ปฏิทิน</h4>
+                  <div class="text-right">
+                    <div class="text-3xl font-bold text-blue-600">{{ currentDate }}</div>
+                    <div class="text-xs text-gray-500 font-medium mt-0.5">{{ currentMonth }} {{ currentYear }}</div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-7 gap-1.5">
+                  <div v-for="day in ['อา','จ','อ','พ','พฤ','ศ','ส']" :key="day" class="text-center text-xs font-semibold text-gray-500 py-1.5">{{ day }}</div>
+                  <div
+                    v-for="d in calendarDates"
+                    :key="d.key"
+                    class="aspect-square flex items-center justify-center rounded-md text-sm font-medium cursor-pointer transition-all"
+                    :class="d.isToday ? 'bg-blue-500 text-white shadow-sm scale-105' : d.isOtherMonth ? 'text-gray-300' : 'text-gray-700 hover:bg-gray-100'"
+                  >
+                    {{ d.date }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Announcements -->
+              <div class="modern-card shadow-md">
+                <div class="flex items-center gap-2 mb-5">
+                  <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-lg shadow-sm">
+                    📢
+                  </div>
+                  <h4 class="font-semibold text-gray-900 text-lg">ประกาศ</h4>
+                </div>
+                <div class="space-y-3">
+                  <div class="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 hover:shadow-md cursor-pointer transition-all">
+                    <div class="font-semibold text-gray-900 text-sm">ปิดระบบเสาร์ที่ 20:00-22:00</div>
+                    <div class="text-sm text-gray-600 mt-1">ปรับปรุงระบบ</div>
+                    <div class="text-xs text-gray-400 mt-2 flex items-center gap-1.5">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                      10/21/2025
+                    </div>
+                  </div>
+                  <div class="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200 hover:shadow-md cursor-pointer transition-all">
+                    <div class="font-semibold text-gray-900 text-sm">เพิ่มฟีเจอร์แจ้งเตือน</div>
+                    <div class="text-sm text-gray-600 mt-1">ตอนนี้ส่งอีเมลแล้ว</div>
+                    <div class="text-xs text-gray-400 mt-2 flex items-center gap-1.5">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                      10/21/2025
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- ตัวอย่างการ์ดอื่น ๆ: วางคู่ (2 คอลัมน์) และเต็มแถว -->
-    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="w-full bg-white rounded-xl shadow-sm p-6">
-        <h4 class="font-semibold text-gray-900">ปฏิทินวันนี้</h4>
-        <p class="text-gray-600 text-sm mt-2">แสดงสรุปรายการประชุมของวันนี้</p>
-        <!-- วาง widget ปฏิทิน/ตารางได้ที่นี่ -->
-      </div>
-      <div class="w-full bg-white rounded-xl shadow-sm p-6">
-        <h4 class="font-semibold text-gray-900">สรุปสถานะห้อง</h4>
-        <p class="text-gray-600 text-sm mt-2">สรุปห้องว่าง/ไม่ว่างตามช่วงเวลา</p>
-        <!-- วาง widget สถานะห้องได้ที่นี่ -->
-      </div>
-    </section>
-
-    <section class="w-full bg-white rounded-xl shadow-sm p-6">
-      <h4 class="font-semibold text-gray-900">ข่าว/ประกาศล่าสุด</h4>
-      <p class="text-gray-600 text-sm mt-2">พื้นที่ประกาศข่าวสารของระบบ</p>
-      <!-- รายการประกาศ -->
-    </section>
-  </main>
-</div>
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup>
-// News Card Slider State
-import { ref as vueRef, onMounted as vueOnMounted, onUnmounted as vueOnUnmounted } from 'vue'
-import axios from "axios";
-import { createSocket } from "@/plugins/socket";
-import useNotifications from "@/composables/useNotifications";
-
-const newsCards = [
-  {
-    img: 'https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?auto=format&fit=crop&w=900&q=80',
-    title: "ยินดีต้อนรับสู่การจัดการประชุมยุคใหม่",
-    desc: "เพื่อส่งความสะดวกในการจัดการประชุม ระบบจองห้องประชุมอัจฉริยะ ถูกพัฒนาขึ้นเพื่อให้การจองห้องประชุมขององค์กรเป็นเรื่องง่ายและไม่ซับซ้อน!",
-    details: [
-      {
-        heading: "📢 ประกาศใหม่",
-        class: "bg-blue-50 rounded-lg p-4",
-        titleClass: "text-blue-700",
-        items: [
-          "ระบบรองรับการจองห้องประชุมล่วงหน้าได้ถึง 6 เดือน",
-          "เพิ่มฟีเจอร์แจ้งเตือนผ่านอีเมลสำหรับการจองและยกเลิก"
-        ]
-      },
-      {
-        heading: "🆕 อัปเดตล่าสุด",
-        class: "bg-green-50 rounded-lg p-4",
-        titleClass: "text-green-700",
-        items: [
-          "ปรับปรุง UI ให้ใช้งานง่ายขึ้นบนมือถือ",
-          "เพิ่มระบบรายงานปัญหาและข้อเสนอแนะ"
-        ]
-      }
-    ]
-  },
-  {
-    img: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca?auto=format&fit=crop&w=900&q=80',
-    title: "ระบบแจ้งเตือนใหม่!",
-    desc: "ไม่พลาดทุกการเปลี่ยนแปลง ระบบแจ้งเตือนผ่านอีเมลและแอป แจ้งเตือนทุกการจองและยกเลิกแบบเรียลไทม์",
-    buttons: [
-      { text: "ดูรายละเอียด", href: "#" },
-      { text: "ตั้งค่าการแจ้งเตือน", href: "#" }
-    ]
-  },
-  {
-    img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=900&q=80',
-    title: "จองห้องประชุมได้ทุกที่ ทุกเวลา",
-    desc: "รองรับการจองผ่านมือถือและคอมพิวเตอร์ สะดวก รวดเร็ว ทุกเวลา พร้อมระบบค้นหาห้องว่างแบบเรียลไทม์",
-    buttons: [
-      { text: "จองห้องประชุม", href: "#" },
-      { text: "ดูห้องว่าง", href: "#" }
-    ]
-  }
-]
-const currentNews = vueRef(0)
-let newsInterval = null
-function nextNews() {
-  currentNews.value = (currentNews.value + 1) % newsCards.length
-}
-function prevNews() {
-  currentNews.value = (currentNews.value - 1 + newsCards.length) % newsCards.length
-}
-vueOnMounted(() => {
-  newsInterval = setInterval(nextNews, 7000)
-})
-vueOnUnmounted(() => {
-  if (newsInterval) clearInterval(newsInterval)
-})
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuth } from '@/composables/useAuth'
 import api from '@/lib/api.js'
 
-/* ===== auth / logout ===== */
-const { isAdmin } = useAuth()
 const router = useRouter()
+const showMobileMenu = ref(false)
 
 function logout () {
   localStorage.removeItem('access_token')
@@ -333,9 +446,7 @@ function logout () {
   router.push('/login')
 }
 
-// Search bar removed
-
-/* ===== เวลา + ปฏิทิน ===== */
+/* ===== DateTime + Calendar ===== */
 const currentTime  = ref('')
 const currentDate  = ref('')
 const currentMonth = ref('')
@@ -348,12 +459,10 @@ const thaiMonths = [
 
 const updateDateTime = () => {
   const now = new Date()
-  currentTime.value = now.toLocaleTimeString('th-TH', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  })
+  currentTime.value = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   currentDate.value = now.getDate()
   currentMonth.value = thaiMonths[now.getMonth()]
-  currentYear.value = now.getFullYear() + 543 // พ.ศ.
+  currentYear.value = now.getFullYear() + 543
 }
 
 const calendarDates = computed(() => {
@@ -361,9 +470,8 @@ const calendarDates = computed(() => {
   const year = now.getFullYear()
   const month = now.getMonth()
   const today = now.getDate()
-
   const firstDay = new Date(year, month, 1)
-  const startDate = firstDay.getDay() // 0=Sun
+  const startDate = firstDay.getDay()
   const lastDay = new Date(year, month + 1, 0).getDate()
   const prevMonth = new Date(year, month, 0).getDate()
 
@@ -382,8 +490,14 @@ const calendarDates = computed(() => {
   return dates.slice(0, 42)
 })
 
-/* ===== แจ้งเตือน (กระดิ่ง) ===== */
+/* ===== Notifications ===== */
 const me = ref(null)
+const showNotif = ref(false)
+const notifs = ref([])
+const unreadCount = ref(0)
+const loadingNoti = ref(false)
+const errorNoti = ref('')
+
 async function fetchMe () {
   try {
     const { data } = await api.get('/api/auth/me')
@@ -391,149 +505,120 @@ async function fetchMe () {
   } catch { me.value = null }
 }
 
-// ✅ ใช้ composable และ map ให้ตรงกับตัวแปรใน template
-const {
-  items: notifItems,
-  unreadCount: storeUnread,
-  loading: storeLoading,
-  error: storeError,
-  refresh, markAllRead, markRead,
-} = useNotifications();
-
-let socket = null;
-
-const showNotif = ref(false);
-const notifs = computed(() => notifItems.value);
-const unreadCount = computed(() => storeUnread.value);
-const loadingNoti = computed(() => storeLoading.value);
-const errorNoti = computed(() => storeError.value || "");
-
-// ฟอร์แมตเวลาแบบไทย
-function formatTime (iso) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
-}
-
-// ✅ map เส้นทางจาก refType/refId -> route ปลายทาง
-function resolveRouteByNotif(n) {
-  const refType = n && n.refType;
-  const refId = n && n.refId;
-
-  switch (refType) {
-    case 'BOOKING':
-      // ไปหน้า booking-info/:id ถ้ามี id, ถ้าไม่มี fallback ไปหน้า booking-info
-      if (refId) return { path: `/booking-info/${refId}` };
-      return { path: '/booking-info' };
-
-    case 'ISSUE':
-      // ตอนนี้คุณยังไม่มีหน้า issue detail แยก -> ส่งไปหน้า /report
-      // ถ้าอยากไฮไลต์ ticket ใด ticket หนึ่งแนบ query ไปด้วยได้
-      return refId
-        ? { path: '/report', query: { issueId: String(refId) } }
-        : { path: '/report' };
-
-    case 'INVITE':
-      return { path: '/my-invites' };
-
-    default:
-      return { path: '/home' };
-  }
-}
-
-// ฟังก์ชันสำหรับ template
-function toggleNotif() {
-  showNotif.value = !showNotif.value;
-  if (showNotif.value) refresh(); // โหลดรายการเมื่อเปิด
-}
-function refreshNotif() { return refresh(); }
-function markAllAsRead() { return markAllRead(); }
-function markAsRead(n) { return markRead(n.id); }
-
-// ✅ กดรายการ -> ทำอ่านแล้ว + ปิด dropdown + นำทาง
-async function goNotif(n) {
+async function fetchNotifications() {
+  loadingNoti.value = true
+  errorNoti.value = ''
   try {
-    const wasRead = !!n.isRead;
-    if (!wasRead) n.isRead = true; // optimistic UI
-
-    await markRead(n.id);          // sync server + badge ใน store
-    showNotif.value = false;       // ปิด dropdown
-
-    const target = resolveRouteByNotif(n);
-    // ถ้า booking แต่ไม่มี detail page อยากให้ไปไฮไลต์ในรายการ:
-    // const target = n.refType==='BOOKING' && n.refId
-    //   ? { path: '/booking-list', query: { focusId: String(n.refId) } }
-    //   : resolveRouteByNotif(n);
-
-    router.push(target);
+    const { data } = await api.get('/api/notifications')
+    notifs.value = data.items || []
+    unreadCount.value = notifs.value.filter(n => !n.isRead).length
   } catch (e) {
-    // revert ถ้ามี error
-    n.isRead = false;
-    console.error(e);
+    errorNoti.value = 'ไม่สามารถโหลดการแจ้งเตือนได้'
+    console.error(e)
+  } finally {
+    loadingNoti.value = false
   }
 }
 
-// ปิด dropdown เมื่อคลิกนอก
+function formatTime (iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+function toggleNotif () {
+  showNotif.value = !showNotif.value
+  if (showNotif.value) fetchNotifications()
+}
+
+function refreshNotif () { return fetchNotifications() }
+
+async function markAllAsRead () {
+  try {
+    await api.post('/api/notifications/mark-all-read')
+    notifs.value = notifs.value.map(n => ({ ...n, isRead: true }))
+    unreadCount.value = 0
+  } catch (e) { console.error(e) }
+}
+
+async function markAsRead (n) {
+  try {
+    await api.patch(`/api/notifications/${n.id}/read`)
+    n.isRead = true
+    unreadCount.value = Math.max(0, unreadCount.value - 1)
+  } catch (e) { console.error(e) }
+}
+
+function resolveRouteByNotif (n) {
+  const refType = n?.refType
+  const refId = n?.refId
+  switch (refType) {
+    case 'BOOKING': return refId ? { path: `/booking/${refId}` } : { path: '/booking-list' }
+    case 'ISSUE': return { path: '/report', query: refId ? { issueId: String(refId) } : {} }
+    case 'INVITE': return { path: '/my-invites' }
+    default: return { path: '/home' }
+  }
+}
+
+async function goNotif (n) {
+  try {
+    if (!n.isRead) {
+      n.isRead = true
+      await markAsRead(n)
+    }
+    showNotif.value = false
+    router.push(resolveRouteByNotif(n))
+  } catch (e) {
+    n.isRead = false
+    console.error(e)
+  }
+}
+
 function handleClickOutside (e) {
   const dropdown = document.querySelector('[data-noti-dropdown]')
-  const bellBtn  = document.querySelector('[data-noti-bell]')
+  const bellBtn = document.querySelector('[data-noti-bell]')
   if (!dropdown) { showNotif.value = false; return }
   if (!dropdown.contains(e.target) && !(bellBtn && bellBtn.contains(e.target))) {
     showNotif.value = false
   }
 }
 
-/* ===== lifecycle ===== */
 let clockTimer = null
-let notiTimer  = null
+let notiTimer = null
 
 onMounted(async () => {
   updateDateTime()
   clockTimer = setInterval(updateDateTime, 1000)
-
   await fetchMe()
-  await refresh() // โหลดชุดแรก + count
-
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    socket = createSocket(token);
-    // มาใหม่ -> เติมหัวรายการ + เพิ่ม badge ถ้ายังไม่อ่าน
-    socket.on("notif:new", ({ item }) => {
-      notifItems.value = [item, ...notifItems.value].slice(0, 50);
-      if (!item.isRead) storeUnread.value = (storeUnread.value || 0) + 1;
-      playSound("/sounds/notif.mp3");
-      toast(`🔔 ${item.title}`, { description: item.message });
-    });
-    // อัปเดตรายการเดียว (เช่น mark read จากแท็บอื่น)
-    socket.on("notif:update", ({ id, patch }) => {
-      const idx = notifItems.value.findIndex(n => n.id === id);
-      if (idx !== -1) {
-        notifItems.value[idx] = Object.assign({}, notifItems.value[idx], patch || {});
-      }
-    });
-    // ทำทั้งหมดเป็นอ่านแล้วจากที่อื่น
-    socket.on("notif:update-all-read", () => {
-      notifItems.value = notifItems.value.map(n => Object.assign({}, n, { isRead: true }));
-    });
-    // อัปเดต badge ให้ตรงกับ server
-    socket.on("notif:badge", ({ count }) => {
-      storeUnread.value = typeof count === 'number' ? count : storeUnread.value;
-    });
-  }
-
-  // รีเฟรชทุก 30 วิ
-  notiTimer = setInterval(() => refresh(), 30000)
+  await fetchNotifications()
+  notiTimer = setInterval(() => fetchNotifications(), 30000)
   document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
-  if (notiTimer)  clearInterval(notiTimer)
+  if (notiTimer) clearInterval(notiTimer)
   document.removeEventListener('click', handleClickOutside)
-  if (socket) { socket.disconnect(); socket = null; }
 })
 </script>
 
-<style>
-/* Add any additional custom styles here */
+<style scoped>
+.nav-link {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900;
+}
+.nav-active {
+  @apply bg-blue-50 text-blue-600;
+}
+
+.mobile-nav-link {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900;
+}
+
+.modern-card {
+  @apply bg-white rounded-2xl border border-gray-200 p-6;
+}
+
+.stat-card {
+  @apply rounded-2xl border p-6;
+}
 </style>

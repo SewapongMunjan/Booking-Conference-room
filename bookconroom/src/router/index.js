@@ -22,6 +22,9 @@ import IssuesPage from '@/page/admin/IssuesPage.vue'
 import LoansPage from '@/page/admin/LoansPage.vue'
 import RoomStatusPage from '@/page/admin/RoomStatusPage.vue'
 
+// Note taker pages
+import NoteTakerDashboard from '@/page/note-taker/NoteTakerDashboard.vue'
+
 const routes = [
   { path: '/', redirect: '/home', meta: { requiresAuth: true } },
   { path: '/login', component: Loginpage },
@@ -45,6 +48,8 @@ const routes = [
   { path: '/admin/issues', name: 'AdminIssues', component: IssuesPage, meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/admin/loans', name: 'AdminLoans', component: LoansPage, meta: { requiresAuth: true, role: 'ADMIN' } },
   { path: '/admin/room-status', name: 'AdminRoomStatus', component: RoomStatusPage, meta: { requiresAuth: true, role: 'ADMIN' } },
+
+  { path: '/note-taker/dashboard', component: NoteTakerDashboard, meta: { requiresAuth: true, role: 'NOTETAKER' } },
 
   { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
