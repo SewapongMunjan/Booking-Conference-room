@@ -99,3 +99,15 @@ export function requireSelfOrAdmin(getOwnerId: (req: Request) => number | undefi
     return res.status(403).json({ error: "Forbidden" });
   };
 }
+
+/**
+ * isNotetaker middleware
+ * - อนุญาตเฉพาะผู้ใช้ที่มี pos: NoteTaker หรือ pos: Backup NoteTaker
+ */
+export function isNotetaker(req: Request, res: Response, next: NextFunction) {
+  const pos = req.user?.pos; // Access pos directly
+  if (!pos || (pos !== 'NoteTaker' && pos !== 'Backup NoteTaker')) {
+    return res.status(403).json({ error: "Notetaker only" });
+  }
+  return next();
+}
