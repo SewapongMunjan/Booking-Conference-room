@@ -111,12 +111,12 @@ export function requireSelfOrAdmin(getOwnerId: (req: Request) => number | undefi
  * - ไม่มี flag isBackupNoteTaker ในสคีมา: บทบาทสำรองให้แยกตรวจที่ระดับ Booking ผ่าน roleIndex ของ BookingNoteTaker
  */
 export function isNotetaker(req: Request, res: Response, next: NextFunction) {
-  const flags = req.user?.pos;
+  const position = req.user?.pos;
 
   const canTakeNotes = !!(
-    flags?.isAdmin ||
-    flags?.isNoteManager ||
-    flags?.isNoteTaker
+    position?.isAdmin ||
+    position?.isNoteManager ||
+    position?.isNoteTaker
   );
 
   if (!canTakeNotes) {

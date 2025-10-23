@@ -2,6 +2,7 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -15,8 +16,8 @@ enum RoomStatus {
 
 enum BookingStatus {
   // หลังสร้างการจอง: รอผู้เข้าร่วม (ตามตำแหน่ง) กดยืนยัน
-  AWAITING_ATTENDEE_CONFIRM  // รอการยืนยันเข้าร่วมจากพนักงานตามตำแหน่ง
-  AWAITING_ADMIN_APPROVAL    // ผู้จองเลือกตำแหน่งแล้ว/ยืนยันครบ ส่งต่อให้แอดมินอนุมัติ
+  AWAITING_ATTENDEE_CONFIRM // รอการยืนยันเข้าร่วมจากพนักงานตามตำแหน่ง
+  AWAITING_ADMIN_APPROVAL // ผู้จองเลือกตำแหน่งแล้ว/ยืนยันครบ ส่งต่อให้แอดมินอนุมัติ
   APPROVED
   REJECTED
   CANCELLED
@@ -42,14 +43,16 @@ enum ServiceCategory {
 }
 
 enum ServiceStatus {
-  PENDING        // สร้างคำขอแล้ว
-  IN_PROGRESS    // แผนกรับทราบและกำลังจัดการ
-  CONFIRMED      // ยืนยันเรียบร้อย (พร้อมใช้งาน)
-  COMPLETED      // ปิดงานหลังประชุมจบ
+  PENDING // สร้างคำขอแล้ว
+  IN_PROGRESS // แผนกรับทราบและกำลังจัดการ
+  CONFIRMED // ยืนยันเรียบร้อย (พร้อมใช้งาน)
+  COMPLETED // ปิดงานหลังประชุมจบ
   REJECTED
 }
 
-/* ✅ เพิ่ม enum สำหรับ Notification */
+/**
+ * ✅ เพิ่ม enum สำหรับ Notification
+ */
 enum NotifType {
   INVITE
   APPROVED
@@ -67,177 +70,207 @@ enum RefType {
 
 // ---------- Master Data ----------
 model Department {
-  id         Int        @id @default(autoincrement())
-  name       String     @unique   // เช่น IT, Housekeeping, NoteTaking
-  positions  Position[]
-  services   Service[]
+  id        Int        @id @default(autoincrement())
+  name      String     @unique // เช่น IT, Housekeeping, NoteTaking
+  positions Position[]
+  services  Service[]
 }
 
 model Position {
-  id            Int            @id @default(autoincrement())
-  name          String         @unique    // เช่น Admin, Manager, Staff, NoteTaker
+  id            Int         @id @default(autoincrement())
+  name          String      @unique // เช่น Admin, Manager, Staff, NoteTaker
   // กำหนดตำแหน่งที่เป็นแอดมิน เพื่อใช้อนุมัติการจอง/ดูแลระบบ
-  isAdmin       Boolean  @default(false)
-  isNoteManager Boolean  @default(false)
-  isNoteTaker   Boolean  @default(false)
+  isAdmin       Boolean     @default(false)
+  isNoteManager Boolean     @default(false)
+  isNoteTaker   Boolean     @default(false)
   description   String?
   departmentId  Int?
-  department    Department?    @relation(fields: [departmentId], references: [id])
+  department    Department? @relation(fields: [departmentId], references: [id])
 
-  users         User[]
-  neededBy      BookingRequiredPosition[]
+  users    User[]
+  neededBy BookingRequiredPosition[]
 }
 
 model User {
-  id               Int                 @id @default(autoincrement())
-  username         String              @unique
-  passwordHash     String
-  fullName         String
-  email            String?             @unique
-  positionId       Int
-  position         Position            @relation(fields: [positionId], references: [id])
-  createdAt        DateTime            @default(now())
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  fullName     String
+  email        String?  @unique
+  positionId   Int
+  position     Position @relation(fields: [positionId], references: [id])
+  createdAt    DateTime @default(now())
 
   // ผู้จอง
-  bookingsBooked   Booking[]           @relation("BookedBy")
+  bookingsBooked Booking[] @relation("BookedBy")
 
   // คำเชิญเข้าร่วม (จากตำแหน่ง → รายบุคคล)
-  bookingInvites   BookingInvite[]
+  bookingInvites BookingInvite[]
 
   // ถูก assign ให้จดประชุม
   noteTakerAssigns BookingNoteTaker[]
 
-  // ✅ ตั้งชื่อ relation ให้ชัดเจน
-  notifications    Notification[]      @relation("UserNotifications")
+  // ✅ ความสัมพันธ์ Notification (ตั้งชื่อไว้แล้ว)
+  notifications Notification[] @relation("UserNotifications")
 
-  noteTakerQueues  NoteTakerQueue[]
+  // 🔧 FIX: ต้องเป็น one-to-one (เพราะ NoteTakerQueue.userId เป็น @unique)
+  noteTakerQueue NoteTakerQueue?
+
+  // ✅ ความสัมพันธ์ NoteTakerLeave
+  noteTakerLeaves NoteTakerLeave[] @relation("UserNoteTakerLeaves")
 }
 
 // ---------- Rooms & Bookings ----------
 model MeetingRoom {
-  id        Int         @id @default(autoincrement())
-  roomName  String      @unique
-  capacity  Int         // ขนาดห้องเก็บเป็นตัวเลข เช่น 30, 50, 100
-  status    RoomStatus  @default(AVAILABLE)
+  id       Int        @id @default(autoincrement())
+  roomName String     @unique
+  capacity Int // ขนาดห้องเก็บเป็นตัวเลข เช่น 30, 50, 100
+  status   RoomStatus @default(AVAILABLE)
 
-  bookings  Booking[]
+  bookings Booking[]
 }
 
 model Booking {
-  id           Int               @id @default(autoincrement())
-  roomId       Int
-  room         MeetingRoom       @relation(fields: [roomId], references: [id])
+  id     Int         @id @default(autoincrement())
+  roomId Int
+  room   MeetingRoom @relation(fields: [roomId], references: [id])
 
-  bookedById   Int
-  bookedBy     User              @relation("BookedBy", fields: [bookedById], references: [id])
+  bookedById Int
+  bookedBy   User @relation("BookedBy", fields: [bookedById], references: [id])
 
-  startTime    DateTime
-  endTime      DateTime
-  status       BookingStatus     @default(AWAITING_ATTENDEE_CONFIRM)
+  startTime DateTime
+  endTime   DateTime
+  status    BookingStatus @default(AWAITING_ATTENDEE_CONFIRM)
 
-  purpose      String?           // วัตถุประสงค์ (ถ้ามี)
-  createdAt    DateTime          @default(now())
+  purpose   String? // วัตถุประสงค์ (ถ้ามี)
+  createdAt DateTime @default(now())
 
   // ระบุตำแหน่งงานที่ต้องเข้าร่วมประชุม
   requiredPositions BookingRequiredPosition[]
 
   // คำเชิญรายบุคคล (สร้างอัตโนมัติจากตำแหน่งที่ถูกเลือก)
-  invites       BookingInvite[]
+  invites BookingInvite[]
 
   // ผู้จดประชุม 2 คน/การประชุม
-  noteTakers    BookingNoteTaker[]
+  noteTakers BookingNoteTaker[]
 
   // ตัวเลือกเสริม (ส่งไปยังฝ่ายที่รับผิดชอบ)
-  services      BookingService[]
+  services BookingService[]
 }
 
 model BookingRequiredPosition {
-  id         Int       @id @default(autoincrement())
+  id         Int @id @default(autoincrement())
   bookingId  Int
   positionId Int
 
-  booking    Booking   @relation(fields: [bookingId], references: [id])
-  position   Position  @relation(fields: [positionId], references: [id])
+  booking  Booking  @relation(fields: [bookingId], references: [id])
+  position Position @relation(fields: [positionId], references: [id])
+
+  @@index([bookingId])
+  @@index([positionId])
 }
 
 model BookingInvite {
-  id          Int           @id @default(autoincrement())
+  id          Int          @id @default(autoincrement())
   bookingId   Int
   userId      Int
-  status      InviteStatus  @default(INVITED)
+  status      InviteStatus @default(INVITED)
   respondedAt DateTime?
 
-  booking     Booking       @relation(fields: [bookingId], references: [id])
-  user        User          @relation(fields: [userId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
 
   @@unique([bookingId, userId])
+  @@index([userId])
+  @@index([bookingId, status])
 }
 
 model BookingNoteTaker {
-  id         Int             @id @default(autoincrement())
-  bookingId  Int
-  userId     Int
-  roleIndex  Int             // 1,2 = หลัก ; 3,4 = สำรอง (ถ้าใช้)
-  status     NoteQueueStatus @default(INVITED)
+  id        Int             @id @default(autoincrement())
+  bookingId Int
+  userId    Int
+  roleIndex Int // 1,2 = หลัก ; 3,4 = สำรอง (ถ้าใช้)
+  status    NoteQueueStatus @default(INVITED)
 
-  booking    Booking         @relation(fields: [bookingId], references: [id])
-  user       User            @relation(fields: [userId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
 
   @@unique([bookingId, userId])
+  @@index([userId])
+  @@index([bookingId, status])
 }
 
 model NoteTakerQueue {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @unique
-  user      User     @relation(fields: [userId], references: [id])
-  orderNo   Int
-  isActive  Boolean  @default(true)
+  id       Int     @id @default(autoincrement())
+  userId   Int     @unique
+  user     User    @relation(fields: [userId], references: [id])
+  orderNo  Int
+  isActive Boolean @default(true)
+
+  @@index([isActive, orderNo])
 }
 
 // ---------- Services / Options ----------
 model Service {
-  id               Int               @id @default(autoincrement())
-  name             String            @unique // เช่น โปรเจคเตอร์, ระบบเสียง, กาแฟ/เครื่องดื่ม, จดประชุม
-  category         ServiceCategory
-  departmentId     Int?              // แผนกที่รับผิดชอบ เช่น IT, Housekeeping, NoteTaking
-  department       Department?       @relation(fields: [departmentId], references: [id])
+  id           Int             @id @default(autoincrement())
+  name         String          @unique // เช่น โปรเจคเตอร์, ระบบเสียง, กาแฟ/เครื่องดื่ม, จดประชุม
+  category     ServiceCategory
+  departmentId Int? // แผนกที่รับผิดชอบ เช่น IT, Housekeeping, NoteTaking
+  department   Department?     @relation(fields: [departmentId], references: [id])
 
-  requiresApproval Boolean           @default(false) // เช่น IT อาจต้อง confirm ความพร้อมอุปกรณ์
+  requiresApproval Boolean @default(false) // เช่น IT อาจต้อง confirm ความพร้อมอุปกรณ์
 
-  bookingUsages    BookingService[]
+  bookingUsages BookingService[]
 }
 
 model BookingService {
-  id         Int           @id @default(autoincrement())
-  bookingId  Int
-  serviceId  Int
-  quantity   Int?          // เช่น กาแฟกี่แก้ว
-  status     ServiceStatus @default(PENDING)
+  id        Int           @id @default(autoincrement())
+  bookingId Int
+  serviceId Int
+  quantity  Int? // เช่น กาแฟกี่แก้ว
+  status    ServiceStatus @default(PENDING)
   // มอบหมายต่อให้หัวหน้าแผนกที่เกี่ยวข้องในภายหลังผ่านแอป/แดชบอร์ด
 
-  booking    Booking       @relation(fields: [bookingId], references: [id])
-  service    Service       @relation(fields: [serviceId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id])
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@index([bookingId])
+  @@index([serviceId, status])
 }
 
 // ---------- Notifications (✅ ปรับปรุงครบ) ----------
 model Notification {
-  id        Int        @id @default(autoincrement())
-  userId    Int
-  user      User       @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation("UserNotifications", fields: [userId], references: [id])
 
   // ชนิด/หัวข้อ/ข้อความ เพื่อ UI และฟิลเตอร์
-  type      NotifType
-  title     String      // แนะนำสั้นๆ เช่น "การจองได้รับการอนุมัติ"
-  message   String
+  type    NotifType
+  title   String // แนะนำสั้นๆ เช่น "การจองได้รับการอนุมัติ"
+  message String
 
   // อ้างอิงรีซอร์สที่เกี่ยวข้อง (ไม่ทำ FK เพื่อความยืดหยุ่น)
-  refType   RefType?
-  refId     Int?        // ใช้ Int ให้สอดคล้องกับ id ของ Booking/Invite/Issue ในสคีมา
+  refType RefType?
+  refId   Int? // ใช้ Int ให้สอดคล้องกับ id ของ Booking/Invite/Issue ในสคีมา
 
-  isRead    Boolean     @default(false)
-  createdAt DateTime    @default(now())
+  isRead    Boolean   @default(false)
+  createdAt DateTime  @default(now())
   readAt    DateTime?
 
   // ดัชนีสำหรับ list ล่าสุด + นับ unread เร็วขึ้น
   @@index([userId, isRead, createdAt])
+}
+
+model NoteTakerLeave {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  date      DateTime // daily leave (00:00:00 ของวันนั้น)
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user User @relation("UserNoteTakerLeaves", fields: [userId], references: [id])
+
+  // ✅ ใช้ใน notetakers.ts: atDate() จะ normalize เวลาเป็น 00:00 → เทียบเท่ากันพอดี
+  @@unique([userId, date])
+  @@index([userId, date])
 }
