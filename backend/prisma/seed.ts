@@ -41,55 +41,67 @@ async function main() {
   // ========== 2) Positions (รวม role + flags) ==========
   const positionsData = [
     // IT
-    { name: "Admin", isAdmin: true, isNoteTaker: false, departmentId: itDept.id, description: "System administrator" },
-    { name: "IT Manager", isAdmin: false, isNoteTaker: false, departmentId: itDept.id },
-    { name: "IT Support", isAdmin: false, isNoteTaker: false, departmentId: itDept.id },
-    { name: "System Engineer", isAdmin: false, isNoteTaker: false, departmentId: itDept.id },
-    { name: "Network Engineer", isAdmin: false, isNoteTaker: false, departmentId: itDept.id },
-    { name: "Audio-Visual Specialist", isAdmin: false, isNoteTaker: false, departmentId: itDept.id },
+    { name: "Admin",                 isAdmin: true,  isNoteManager: false, isNoteTaker: false, departmentId: itDept.id, description: "System administrator" },
+    { name: "IT Manager",            isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: itDept.id },
+    { name: "IT Support",            isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: itDept.id },
+    { name: "System Engineer",       isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: itDept.id },
+    { name: "Network Engineer",      isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: itDept.id },
+    { name: "Audio-Visual Specialist", isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: itDept.id },
 
     // Housekeeping
-    { name: "Housekeeping Manager", isAdmin: false, isNoteTaker: false, departmentId: hkDept.id },
-    { name: "Barista", isAdmin: false, isNoteTaker: false, departmentId: hkDept.id },
-    { name: "Cleaning Staff", isAdmin: false, isNoteTaker: false, departmentId: hkDept.id },
-    { name: "Logistics Staff", isAdmin: false, isNoteTaker: false, departmentId: hkDept.id },
+    { name: "Housekeeping Manager",  isAdmin: false, isNoteManager: false, isNoteTaker: false, isHousekeepingLead: true, departmentId: hkDept.id },
+    { name: "Barista",               isAdmin: false, isNoteManager: false, isNoteTaker: false, isHousekeeper: true,    departmentId: hkDept.id },
+    { name: "Cleaning Staff",        isAdmin: false, isNoteManager: false, isNoteTaker: false, isHousekeeper: true,    departmentId: hkDept.id },
+    { name: "Logistics Staff",       isAdmin: false, isNoteManager: false, isNoteTaker: false, isHousekeeper: true,    departmentId: hkDept.id },
 
     // NoteTaking
-    { name: "NoteTaking Manager", isAdmin: false, isNoteTaker: false, departmentId: ntDept.id },
-    { name: "NoteTaker", isAdmin: false, isNoteTaker: true, departmentId: ntDept.id },
-    { name: "Backup NoteTaker", isAdmin: false, isNoteTaker: true, departmentId: ntDept.id },
+    { name: "NoteTaking Manager",    isAdmin: false, isNoteManager: true,  isNoteTaker: false, departmentId: ntDept.id },
+    { name: "NoteTaker",             isAdmin: false, isNoteManager: false, isNoteTaker: true,  departmentId: ntDept.id },
+    { name: "Backup NoteTaker",      isAdmin: false, isNoteManager: false, isNoteTaker: true,  departmentId: ntDept.id },
 
     // Operations
-    { name: "Operations Manager", isAdmin: false, isNoteTaker: false, departmentId: opsDept.id },
-    { name: "Operations Staff", isAdmin: false, isNoteTaker: false, departmentId: opsDept.id },
+    { name: "Operations Manager",    isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: opsDept.id },
+    { name: "Operations Staff",      isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: opsDept.id },
 
     // Sales
-    { name: "Sales Manager", isAdmin: false, isNoteTaker: false, departmentId: salesDept.id },
-    { name: "Sales Executive", isAdmin: false, isNoteTaker: false, departmentId: salesDept.id },
-    { name: "Sales Coordinator", isAdmin: false, isNoteTaker: false, departmentId: salesDept.id },
+    { name: "Sales Manager",         isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: salesDept.id },
+    { name: "Sales Executive",       isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: salesDept.id },
+    { name: "Sales Coordinator",     isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: salesDept.id },
 
     // HR
-    { name: "HR Manager", isAdmin: false, isNoteTaker: false, departmentId: hrDept.id },
-    { name: "HR Officer", isAdmin: false, isNoteTaker: false, departmentId: hrDept.id },
-    { name: "HR Development Specialist", isAdmin: false, isNoteTaker: false, departmentId: hrDept.id },
+    { name: "HR Manager",            isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: hrDept.id },
+    { name: "HR Officer",            isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: hrDept.id },
+    { name: "HR Development Specialist", isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: hrDept.id },
 
     // Finance
-    { name: "Finance Manager", isAdmin: false, isNoteTaker: false, departmentId: finDept.id },
-    { name: "Accountant", isAdmin: false, isNoteTaker: false, departmentId: finDept.id },
-    { name: "Financial Analyst", isAdmin: false, isNoteTaker: false, departmentId: finDept.id },
-  ];
+    { name: "Finance Manager",       isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: finDept.id },
+    { name: "Accountant",            isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: finDept.id },
+    { name: "Financial Analyst",     isAdmin: false, isNoteManager: false, isNoteTaker: false, departmentId: finDept.id },
+  ] as const;
 
   const positionMap: Record<string, number> = {};
   for (const p of positionsData) {
     const pos = await prisma.position.upsert({
       where: { name: p.name },
       update: {
-        isAdmin: p.isAdmin ?? false,
-        isNoteTaker: p.isNoteTaker ?? false,
-        departmentId: p.departmentId ?? null,
-        description: p.description ?? null,
+        isAdmin:            p.isAdmin ?? false,
+        isNoteManager:      p.isNoteManager ?? false,
+        isNoteTaker:        p.isNoteTaker ?? false,
+        isHousekeeper:      (p as any).isHousekeeper ?? false,
+        isHousekeepingLead: (p as any).isHousekeepingLead ?? false,
+        departmentId:       p.departmentId ?? null,
+        description:        (p as any).description ?? null,
       },
-      create: p,
+      create: {
+        name:               p.name,
+        isAdmin:            p.isAdmin ?? false,
+        isNoteManager:      p.isNoteManager ?? false,
+        isNoteTaker:        p.isNoteTaker ?? false,
+        isHousekeeper:      (p as any).isHousekeeper ?? false,
+        isHousekeepingLead: (p as any).isHousekeepingLead ?? false,
+        departmentId:       p.departmentId ?? null,
+        description:        (p as any).description ?? null,
+      },
     });
     positionMap[p.name] = pos.id;
   }
@@ -100,41 +112,41 @@ async function main() {
     { username: "admin", fullName: "System Admin", email: "admin@corp.local", position: "Admin" },
 
     // Managers
-    { username: "mgr_it", fullName: "Mint IT Manager", email: "mint.it@corp.local", position: "IT Manager" },
-    { username: "mgr_ops", fullName: "Napat Ops Manager", email: "napat.ops@corp.local", position: "Operations Manager" },
-    { username: "mgr_sales", fullName: "Prae Sales Manager", email: "prae.sales@corp.local", position: "Sales Manager" },
-    { username: "mgr_hr", fullName: "Korn HR Manager", email: "korn.hr@corp.local", position: "HR Manager" },
-    { username: "mgr_fin", fullName: "Ann Finance Manager", email: "ann.fin@corp.local", position: "Finance Manager" },
+    { username: "mgr_it",   fullName: "Mint IT Manager",   email: "mint.it@corp.local",   position: "IT Manager" },
+    { username: "mgr_ops",  fullName: "Napat Ops Manager", email: "napat.ops@corp.local", position: "Operations Manager" },
+    { username: "mgr_sales",fullName: "Prae Sales Manager",email: "prae.sales@corp.local",position: "Sales Manager" },
+    { username: "mgr_hr",   fullName: "Korn HR Manager",   email: "korn.hr@corp.local",   position: "HR Manager" },
+    { username: "mgr_fin",  fullName: "Ann Finance Manager",email: "ann.fin@corp.local",  position: "Finance Manager" },
 
     // IT members
-    { username: "it_support1", fullName: "Ball IT Support", email: "ball.it1@corp.local", position: "IT Support" },
-    { username: "sys_eng1", fullName: "Jane System Engineer", email: "jane.se@corp.local", position: "System Engineer" },
-    { username: "net_eng1", fullName: "Golf Network Engineer", email: "golf.ne@corp.local", position: "Network Engineer" },
-    { username: "av_spec1", fullName: "Aum AV Specialist", email: "aum.av@corp.local", position: "Audio-Visual Specialist" },
+    { username: "it_support1", fullName: "Ball IT Support",      email: "ball.it1@corp.local", position: "IT Support" },
+    { username: "sys_eng1",    fullName: "Jane System Engineer", email: "jane.se@corp.local",  position: "System Engineer" },
+    { username: "net_eng1",    fullName: "Golf Network Engineer",email: "golf.ne@corp.local",  position: "Network Engineer" },
+    { username: "av_spec1",    fullName: "Aum AV Specialist",    email: "aum.av@corp.local",   position: "Audio-Visual Specialist" },
 
     // Ops / Sales / HR / Finance Staff
-    { username: "ops1", fullName: "Som Ops Staff", email: "som.ops@corp.local", position: "Operations Staff" },
-    { username: "sales_exec1", fullName: "Game Sales Exec", email: "game.sales@corp.local", position: "Sales Executive" },
-    { username: "sales_coord1", fullName: "Fern Sales Coord", email: "fern.sales@corp.local", position: "Sales Coordinator" },
-    { username: "hr_off1", fullName: "Prim HR Officer", email: "prim.hr@corp.local", position: "HR Officer" },
-    { username: "acct1", fullName: "Beam Accountant", email: "beam.fin@corp.local", position: "Accountant" },
-    { username: "fa1", fullName: "Boss Financial Analyst", email: "boss.fa@corp.local", position: "Financial Analyst" },
+    { username: "ops1",        fullName: "Som Ops Staff",        email: "som.ops@corp.local",  position: "Operations Staff" },
+    { username: "sales_exec1", fullName: "Game Sales Exec",      email: "game.sales@corp.local",position: "Sales Executive" },
+    { username: "sales_coord1",fullName: "Fern Sales Coord",     email: "fern.sales@corp.local",position: "Sales Coordinator" },
+    { username: "hr_off1",     fullName: "Prim HR Officer",      email: "prim.hr@corp.local",  position: "HR Officer" },
+    { username: "acct1",       fullName: "Beam Accountant",      email: "beam.fin@corp.local", position: "Accountant" },
+    { username: "fa1",         fullName: "Boss Financial Analyst",email: "boss.fa@corp.local", position: "Financial Analyst" },
 
     // Housekeeping Team
-    { username: "hk_mgr", fullName: "Tuk Housekeeping Manager", email: "tuk.hk@corp.local", position: "Housekeeping Manager" },
-    { username: "barista1", fullName: "Nam Barista", email: "nam.barista@corp.local", position: "Barista" },
-    { username: "clean1", fullName: "Dao Cleaning Staff", email: "dao.clean@corp.local", position: "Cleaning Staff" },
-    { username: "logi1", fullName: "Ken Logistics", email: "ken.logi@corp.local", position: "Logistics Staff" },
+    { username: "hk_mgr",   fullName: "Tuk Housekeeping Manager", email: "tuk.hk@corp.local",  position: "Housekeeping Manager" },
+    { username: "barista1", fullName: "Nam Barista",              email: "nam.barista@corp.local", position: "Barista" },
+    { username: "clean1",   fullName: "Dao Cleaning Staff",       email: "dao.clean@corp.local",   position: "Cleaning Staff" },
+    { username: "logi1",    fullName: "Ken Logistics",            email: "ken.logi@corp.local",    position: "Logistics Staff" },
 
     // NoteTaking team
-    { username: "nt_mgr", fullName: "Pan NoteTaking Manager", email: "pan.nt@corp.local", position: "NoteTaking Manager" },
-    { username: "note1", fullName: "Fon Note Taker", email: "fon.note@corp.local", position: "NoteTaker" },
-    { username: "note2", fullName: "Jame Note Taker", email: "jame.note@corp.local", position: "NoteTaker" },
-    { username: "note3", fullName: "Beam Note Taker", email: "beam.note@corp.local", position: "NoteTaker" },
-    { username: "note4", fullName: "View Note Taker", email: "view.note@corp.local", position: "NoteTaker" },
-    { username: "note5", fullName: "Ice Backup NT", email: "ice.bnt@corp.local", position: "Backup NoteTaker" },
-    { username: "note6", fullName: "Ohm Backup NT", email: "ohm.bnt@corp.local", position: "Backup NoteTaker" },
-  ];
+    { username: "nt_mgr",   fullName: "Pan NoteTaking Manager",   email: "pan.nt@corp.local",   position: "NoteTaking Manager" },
+    { username: "note1",    fullName: "Fon Note Taker",           email: "fon.note@corp.local", position: "NoteTaker" },
+    { username: "note2",    fullName: "Jame Note Taker",          email: "jame.note@corp.local",position: "NoteTaker" },
+    { username: "note3",    fullName: "Beam Note Taker",          email: "beam.note@corp.local",position: "NoteTaker" },
+    { username: "note4",    fullName: "View Note Taker",          email: "view.note@corp.local",position: "NoteTaker" },
+    { username: "note5",    fullName: "Ice Backup NT",            email: "ice.bnt@corp.local",  position: "Backup NoteTaker" },
+    { username: "note6",    fullName: "Ohm Backup NT",            email: "ohm.bnt@corp.local",  position: "Backup NoteTaker" },
+  ] as const;
 
   for (const u of usersData) {
     const plain = getDefaultPasswordByPosition(u.position);
@@ -167,7 +179,7 @@ async function main() {
   };
 
   // ========== 4) Meeting Rooms (30/50/100 อย่างละ 10 ห้อง) ==========
-  const roomSizes = [30, 50, 100];
+  const roomSizes = [30, 50, 100] as const;
   const letters = "ABCDEFGHIJ".split(""); // 10 ห้อง
   for (const cap of roomSizes) {
     for (const L of letters) {
@@ -224,7 +236,7 @@ async function main() {
     }),
   ]);
 
-  // ========== 6) NoteTaker Queue (ดึงจาก usersData ที่เป็น NoteTaker/Backup) ==========
+  // ========== 6) NoteTaker Queue (NoteTaker + Backup NoteTaker) ==========
   const noteUsernames = usersData
     .filter(u => /NoteTaker/i.test(u.position)) // ทั้ง NoteTaker และ Backup NoteTaker
     .map(u => u.username);
@@ -249,7 +261,7 @@ async function main() {
     await main();
   } catch (e) {
     console.error("❌ Seed failed:", e);
-    process.exitCode = 1; // ตั้ง exit code (ไม่บังคับ exit ทันที)
+    process.exitCode = 1;
   } finally {
     await prisma.$disconnect();
   }

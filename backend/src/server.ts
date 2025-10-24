@@ -18,7 +18,7 @@ import metaRoutes from "./routes/meta";
 import invitesRouter from "./routes/invites";
 import notetakersRouter from "./routes/notetakers";
 import notificationsRouter from "./routes/notifications";
-
+import housekeepingRoutes from "./routes/housekeeping";
 // ====== Config ======
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -76,6 +76,7 @@ app.use("/api", metaRoutes);
 app.use("/api/invites", invitesRouter);
 app.use("/api/notetakers", notetakersRouter);
 app.use("/api/notifications", notificationsRouter);
+app.use("/api/housekeeping", housekeepingRoutes);
 
 // ====== 404 ======
 app.use((_req: Request, res: Response) => {
