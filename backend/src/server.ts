@@ -8,7 +8,6 @@ import cors from "cors";
 import jwt from "jsonwebtoken";
 import { Server as IOServer } from "socket.io";
 
-
 import { prisma } from "./prisma";
 
 // Routers
@@ -22,13 +21,13 @@ import notificationsRouter from "./routes/notifications";
 import housekeepingRoutes from "./routes/housekeeping";
 import meetings from "./routes/meetings";
 
+// ⬇️ ⬇️ ⬇️  เพิ่ม: router สำหรับ PDF
+import bookingsPdfRouter from "./routes/bookings.pdf";
 
-// ====== Config ======
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
 
 // อนุญาตหลาย origin ได้แบบ comma-separated ใน .env
-// เช่น CLIENT_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
 const ORIGINS = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
   .split(",")
   .map((s) => s.trim())
@@ -73,6 +72,9 @@ app.get("/health", async (_req: Request, res: Response) => {
 });
 
 // ====== Routes ======
+// ⚠️ สำคัญ: ใส่เส้นทาง PDF "ก่อน" bookingsRouter เสมอ เพื่อให้ /:id/pdf ทำงานได้
+app.use("/api/bookings", bookingsPdfRouter);
+
 app.use("/api/auth", authRouter);
 app.use("/api/me", meLegacyRouter);
 app.use("/api/rooms", roomsRouter);
@@ -83,7 +85,6 @@ app.use("/api/notetakers", notetakersRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/housekeeping", housekeepingRoutes);
 app.use("/api", meetings);
-
 
 // ====== 404 ======
 app.use((_req: Request, res: Response) => {
@@ -100,7 +101,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 const httpServer = http.createServer(app);
 
 export const io = new IOServer(httpServer, {
-  // ให้ path เริ่มต้น /socket.io ใช้ได้ตามปกติ
   cors: {
     origin(origin, cb) {
       if (!origin || ORIGINS.includes(origin)) return cb(null, true);
@@ -123,7 +123,7 @@ function verifyAccessToken(token: string): { sub: number } {
   return { sub: Number(payload.sub) };
 }
 
-// Auth สำหรับ Socket.IO: แนบ userId ไว้ที่ socket ถ้า token ถูกต้อง
+// Auth สำหรับ Socket.IO
 io.use((socket, next) => {
   try {
     const auth = socket.handshake.auth as any;
@@ -143,13 +143,12 @@ io.use((socket, next) => {
         const { sub } = verifyAccessToken(token);
         (socket as any).userId = sub;
       } catch {
-        // ถ้า token ไม่ถูกต้อง: ให้เชื่อมต่อได้ แต่จะไม่ join ห้องส่วนตัว
-        // ถ้าต้องการ block ให้ใช้ next(new Error("AUTH_FAIL"))
+        // ไม่ block; เพียงแค่ไม่มี userId
       }
     }
     next();
   } catch {
-    next(); // ไม่ block connection
+    next();
   }
 });
 
