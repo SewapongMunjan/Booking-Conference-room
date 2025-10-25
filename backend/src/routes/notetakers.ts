@@ -507,15 +507,17 @@ router.post("/substitute", auth, requireNoteManagerOrAdmin, async (req, res) => 
 });
 
 // --- Leaves (ลาล่วงหน้า) ---
-/* ========== Leaves & Requests (ท้ายไฟล์) ========== */
+// ========== Leaves & Requests (ท้ายไฟล์) ==========
 
 // ---------------- Types ----------------
 type LeaveItem = {
-  id: number;
+  id: any;           // อนุญาต string/id ประกอบวัน
+  date?: Date;
   from?: string;
   to?: string;
   reason?: string;
   status?: "PENDING" | "APPROVED" | "REJECTED";
+  conflicts?: Array<{ bookingId: number; roomName: string }>;
 };
 
 type RequestItem = {
@@ -529,11 +531,65 @@ type RequestItem = {
 // ---------------- Handlers ----------------
 async function handleLeavesGet(req: any, res: any) {
   try {
-    const page = Number(req.query.page || 1);
-    const pageSize = Math.min(Number(req.query.pageSize || 200), 200);
-    // TODO: ดึงจาก DB จริง (รองรับ createdBy=me)
+    const meId = Number(req.user?.sub);
+    if (!meId) return res.status(401).json({ error: "UNAUTH" });
+
+    // ช่วงวันที่ (default: -60 ถึง +60 วันจากวันนี้)
+    const today = new Date();
+    const startStr = String(req.query.start || "");
+    const endStr   = String(req.query.end   || "");
+    const start = /^\d{4}-\d{2}-\d{2}$/.test(startStr)
+      ? atDate(startStr)
+      : new Date(today.getFullYear(), today.getMonth(), today.getDate() - 60);
+    const end   = /^\d{4}-\d{2}-\d{2}$/.test(endStr)
+      ? atDate(endStr)
+      : new Date(today.getFullYear(), today.getMonth(), today.getDate() + 60);
+
+    // ดึง leave รายวันของฉัน
+    const rows = await (prisma as any).noteTakerLeave.findMany({
+      where: { userId: meId, date: { gte: start as any, lte: end as any } },
+      orderBy: { date: "desc" },
+      select: { date: true, reason: true },
+    });
+
+    // ตรวจหางานที่ชนในวันนั้น ๆ
     const items: LeaveItem[] = [];
-    return res.json({ items, pagination: { page, pageSize, total: items.length } });
+    for (const r of rows) {
+      const d0 = new Date(r.date);
+      const ds = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), 0, 0, 0);
+      const de = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), 23, 59, 59);
+
+      const conflicts = await prisma.booking.findMany({
+        where: {
+          status: { not: BookingStatus.CANCELLED },
+          OR: [
+            { startTime: { gte: ds, lt: de } },
+            { endTime:   { gt: ds, lte: de } },
+            { AND: [{ startTime: { lte: ds } }, { endTime: { gte: de } }] },
+          ],
+          noteTakers: {
+            some: {
+              userId: meId,
+              status: { in: [NoteQueueStatus.ACCEPTED, NoteQueueStatus.INVITED] },
+            },
+          },
+        },
+        select: { id: true, room: { select: { roomName: true } } },
+      });
+
+      items.push({
+        id: `L-${meId}-${r.date.toISOString().slice(0,10)}`,
+        date: r.date,
+        reason: r.reason,
+        status: "APPROVED", // leave รายวันถือว่าอนุมัติด้วยตนเอง
+        conflicts: conflicts.map(c => ({ bookingId: c.id, roomName: c.room?.roomName || "-" })),
+      });
+    }
+
+    return res.json({
+      items,
+      pagination: { page: 1, pageSize: items.length, total: items.length },
+    });
   } catch (e: any) {
     console.error("GET /leaves failed:", e);
     return res.status(500).json({ error: "Internal Server Error", message: e?.message });
@@ -542,11 +598,30 @@ async function handleLeavesGet(req: any, res: any) {
 
 async function handleLeavesPost(req: any, res: any) {
   try {
-    // ✅ หน้าเว็บส่ง { from, to, reason }
+    const meId = Number(req.user?.sub);
+    if (!meId) return res.status(401).json({ error: "UNAUTH" });
+
+    // หน้าเว็บส่ง { from, to, reason } -> แตกเป็นรายวัน บันทึกลง noteTakerLeave
     const { from, to, reason } = req.body as { from?: string; to?: string; reason?: string };
-    // TODO: บันทึกลง DB จริง
-    const created: LeaveItem = { id: Date.now(), from, to, reason, status: "PENDING" };
-    return res.json({ ok: true, item: created });
+    if (!from) return res.status(400).json({ error: "BAD_DATE" });
+    const s = atDate(from);
+    const e = to ? atDate(to) : s;
+    if (isNaN(s as any) || isNaN(e as any)) return res.status(400).json({ error: "BAD_DATE" });
+
+    const created: string[] = [];
+    await prisma.$transaction(async (tx) => {
+      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        const day = atDate(d);
+        await (tx as any).noteTakerLeave.upsert({
+          where: { userId_date: { userId: meId, date: day as any } },
+          update: { reason: reason || undefined },
+          create: { userId: meId, date: day as any, reason: reason || undefined },
+        });
+        created.push(day.toISOString().slice(0,10));
+      }
+    });
+
+    return res.json({ ok: true, created });
   } catch (e: any) {
     console.error("POST /leaves failed:", e);
     return res.status(500).json({ error: "Internal Server Error", message: e?.message });
@@ -592,5 +667,73 @@ router.post("/requests", auth, handleRequestsPost);
 //  => /api/notetakers/note-taker/requests  (เผื่อโค้ดเก่ายังเรียกอยู่)
 router.get("/note-taker/requests", auth, handleRequestsGet);
 router.post("/note-taker/requests", auth, handleRequestsPost);
+
+/* ========== NEW: My View (สำหรับหน้า MyQueue) ==========
+ * GET /api/notetakers/my-view?limit=5
+ * คืน 3 กลุ่ม: ongoing (กำลังประชุม), upcoming (รับแล้ว-ยังไม่เริ่ม), invitations (ถูกเชิญ)
+ */
+router.get("/my-view", auth, requireNoteRole, async (req, res) => {
+  try {
+    const meId = Number(req.user?.sub);
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || "5"), 10), 1), 20);
+    const now = new Date();
+
+    const where: Prisma.BookingWhereInput = {
+      status: { not: BookingStatus.CANCELLED },
+      noteTakers: { some: { userId: meId } },
+    };
+
+    const rows = await prisma.booking.findMany({
+      where,
+      orderBy: { startTime: "asc" },
+      include: {
+        room: { select: { id: true, roomName: true } },
+        noteTakers: {
+          where: { userId: meId },
+          select: { status: true, userId: true },
+        },
+      },
+    });
+
+    const mapItem = (b: any) => ({
+      id: b.id,
+      roomName: b.room?.roomName ?? "-",
+      startTime: b.startTime,
+      endTime: b.endTime,
+      myStatus: (b.noteTakers?.[0]?.status ?? null) as
+        | "ACCEPTED" | "INVITED" | "DECLINED" | "REPLACED" | null,
+    });
+
+    const ongoing: any[] = [];
+    const upcoming: any[] = [];
+    const invitations: any[] = [];
+
+    for (const b of rows) {
+      const it = mapItem(b);
+      const hasStarted = b.startTime <= now && now <= b.endTime;
+      const future = b.startTime > now;
+
+      if (it.myStatus === "ACCEPTED" && hasStarted) {
+        ongoing.push(it);
+      } else if (it.myStatus === "ACCEPTED" && future) {
+        upcoming.push(it);
+      } else if (it.myStatus === "INVITED" && future) {
+        invitations.push(it);
+      }
+    }
+
+    const byStart = (a: any, b: any) => +new Date(a.startTime) - +new Date(b.startTime);
+    const sliceN = (arr: any[]) => arr.sort(byStart).slice(0, limit);
+
+    res.json({
+      ongoing: sliceN(ongoing),
+      upcoming: sliceN(upcoming),
+      invitations: sliceN(invitations),
+    });
+  } catch (e: any) {
+    console.error("GET /api/notetakers/my-view failed:", e);
+    res.status(500).json({ error: "Internal Server Error", message: e?.message });
+  }
+});
 
 export default router;

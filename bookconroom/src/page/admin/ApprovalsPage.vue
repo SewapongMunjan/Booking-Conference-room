@@ -80,9 +80,9 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
               </svg>
             </span>
-            <input 
-              v-model="q" 
-              placeholder="ค้นหา..." 
+            <input
+              v-model="q"
+              placeholder="ค้นหา..."
               class="w-64 pl-10 pr-3 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
               @input="fetchList"
             />
@@ -327,15 +327,15 @@
 
               <div v-else class="space-y-4">
                 <div
-                  v-for="(b, idx) in items"
+                  v-for="b in items"
                   :key="b.id"
                   class="border-2 border-gray-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md transition-all"
                 >
                   <div class="flex items-start gap-4">
                     <!-- Date Badge -->
                     <div class="flex flex-col items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white shrink-0 shadow-md">
-                      <span class="text-2xl font-bold leading-none">{{ day(b.startTime) }}</span>
-                      <span class="text-[10px] mt-0.5">{{ monthTH(b.startTime) }}</span>
+                      <span class="text-2xl font-bold leading-none">{{ dayOf(b.startTime) }}</span>
+                      <span class="text-[10px] mt-0.5">{{ monthShortTH(b.startTime) }}</span>
                     </div>
 
                     <!-- Content -->
@@ -350,7 +350,7 @@
                               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                               </svg>
-                              {{ timeRange(b.startTime, b.endTime) }}
+                              {{ formatTimeRange(b.startTime, b.endTime) }}
                             </span>
                             <span v-if="b.room?.capacity" class="flex items-center gap-1">
                               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -402,9 +402,9 @@
 
               <!-- Pagination -->
               <div v-if="totalPages > 1" class="mt-6 flex items-center justify-center gap-2">
-                <button 
-                  class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all" 
-                  :disabled="page===1" 
+                <button
+                  class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  :disabled="page===1"
                   @click="page--; fetchList()"
                 >
                   ← ก่อนหน้า
@@ -412,9 +412,9 @@
                 <span class="px-4 py-2 text-sm text-gray-600">
                   หน้า <strong>{{ page }}</strong> / {{ totalPages }}
                 </span>
-                <button 
-                  class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all" 
-                  :disabled="page===totalPages" 
+                <button
+                  class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  :disabled="page===totalPages"
                   @click="page++; fetchList()"
                 >
                   ถัดไป →
@@ -436,7 +436,7 @@
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
-        
+
         <div class="p-6">
           <div v-if="detailLoading" class="text-center py-12">
             <div class="inline-block w-12 h-12 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
@@ -452,7 +452,7 @@
               <div class="space-y-1">
                 <div class="text-xs text-gray-500 uppercase tracking-wider">ห้อง</div>
                 <div class="text-sm font-medium text-gray-900">
-                  {{ detail.room?.roomName }} 
+                  {{ detail.room?.roomName }}
                   <span v-if="detail.room?.capacity" class="text-gray-500">· {{ detail.room.capacity }} ที่นั่ง</span>
                 </div>
               </div>
@@ -463,7 +463,7 @@
               <div class="space-y-1">
                 <div class="text-xs text-gray-500 uppercase tracking-wider">วันเวลา</div>
                 <div class="text-sm font-medium text-gray-900">
-                  {{ timeRange(detail.startTime, detail.endTime) }} · {{ dateTH(detail.startTime) }}
+                  {{ formatTimeRange(detail.startTime, detail.endTime) }} · {{ dateTH(detail.startTime) }}
                 </div>
               </div>
               <div class="space-y-1">
@@ -525,12 +525,12 @@
             </div>
           </div>
         </div>
-        
+
         <div class="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-end gap-2">
           <button class="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-white transition-all" @click="closeDetail">
             ปิด
           </button>
-          <button 
+          <button
             v-if="detail && detail.status === 'AWAITING_ADMIN_APPROVAL'"
             class="px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-all"
             @click="approve(detail); closeDetail()"
@@ -550,6 +550,49 @@ import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
 
 const router = useRouter()
+
+// ----------------------------- Auth / Role -----------------------------
+function parseIsAdminFromToken() {
+  try {
+    const token = localStorage.getItem('access_token')
+    if (!token) return false
+    const b64 = (token.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(b64))
+    return Boolean(
+      payload?.pos?.isAdmin ??
+      payload?.roleFlags?.isAdmin ??
+      payload?.claims?.isAdmin ??
+      (payload?.role === 'ADMIN')
+    )
+  } catch {
+    return false
+  }
+}
+const me = ref(null)
+const isAdmin = computed(() => {
+  if (me.value && typeof me.value.isAdmin === 'boolean') return me.value.isAdmin
+  return parseIsAdminFromToken()
+})
+async function fetchMe() {
+  try {
+    const { data } = await api.get('/api/auth/me')
+    const payload = data?.me || data?.user || data || null
+    if (!payload) { me.value = null; return }
+    const isAdminFlag = !!(payload?.position?.isAdmin ?? payload?.pos?.isAdmin ?? payload?.isAdmin)
+    me.value = { ...payload, isAdmin: isAdminFlag }
+  } catch (e) {
+    console.error('fetchMe failed', e)
+    me.value = null
+  }
+}
+function logout() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('user_role')
+  localStorage.removeItem('me_cache')
+  router.push('/login')
+}
+
+// ----------------------------- State -----------------------------
 const showMobileMenu = ref(false)
 const q = ref('')
 const items = ref([])
@@ -561,155 +604,36 @@ const total = ref(0)
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 const actingId = ref(null)
 
-const me = ref(null)
-
-/** Notifications */
+// notifications
 const showNotif = ref(false)
 const notifs = ref([])
 const unreadCount = ref(0)
 const loadingNoti = ref(false)
+let notiTimer = null
 
-/** Detail Modal */
+// detail modal
 const showDetail = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
 const detail = ref(null)
 
-function parseIsAdminFromToken() {
-  try {
-    const token = localStorage.getItem('access_token')
-    if (!token) return false
-    const payload = JSON.parse(atob((token.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/')))
-    return !!payload?.pos?.isAdmin
-  } catch {
-    return false
-  }
-}
-
-const isAdmin = computed(() => {
-  if (me.value && typeof me.value.isAdmin === 'boolean') return me.value.isAdmin
-  return parseIsAdminFromToken()
-})
-
-async function fetchMe() {
-  try {
-    const { data } = await api.get('/api/auth/me')
-    me.value = { ...data, isAdmin: !!(data?.position?.isAdmin ?? data?.isAdmin) }
-  } catch {
-    me.value = null
-  }
-}
-
-function logout() {
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('user_role')
-  localStorage.removeItem('me_cache')
-  router.push('/login')
-}
-
-async function fetchNotifications() {
-  loadingNoti.value = true
-  try {
-    const { data } = await api.get('/api/notifications')
-    notifs.value = data.items || []
-    unreadCount.value = notifs.value.filter(n => !n.isRead).length
-  } catch (e) {
-    console.error(e)
-  } finally {
-    loadingNoti.value = false
-  }
-}
-
-function formatTime(iso) {
+// ----------------------------- Helpers (UI) -----------------------------
+function dayOf(iso) {
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+  return d.getDate()
 }
-
-function toggleNotif() {
-  showNotif.value = !showNotif.value
-  if (showNotif.value) fetchNotifications()
-}
-
-function refreshNotif() {
-  return fetchNotifications()
-}
-
-async function markAllAsRead() {
-  try {
-    await api.post('/api/notifications/mark-all-read')
-    notifs.value = notifs.value.map(n => ({ ...n, isRead: true }))
-    unreadCount.value = 0
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-async function markAsRead(n) {
-  try {
-    await api.patch(`/api/notifications/${n.id}/read`)
-    n.isRead = true
-    unreadCount.value = Math.max(0, unreadCount.value - 1)
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-function resolveRouteByNotif(n) {
-  const refType = n?.refType
-  const refId = n?.refId
-  switch (refType) {
-    case 'BOOKING':
-      return refId ? { path: `/booking/${refId}` } : { path: '/admin/approvals' }
-    case 'ISSUE':
-      return { path: '/admin/issues', query: refId ? { issueId: String(refId) } : {} }
-    case 'INVITE':
-      return { path: '/my-invites' }
-    default:
-      return { path: '/admin/dashboard-modern' }
-  }
-}
-
-async function goNotif(n) {
-  try {
-    if (!n.isRead) {
-      n.isRead = true
-      await markAsRead(n)
-    }
-    showNotif.value = false
-    router.push(resolveRouteByNotif(n))
-  } catch (e) {
-    n.isRead = false
-    console.error(e)
-  }
-}
-
-function handleClickOutside(e) {
-  const dropdown = document.querySelector('[data-noti-dropdown]')
-  const bellBtn = document.querySelector('[data-noti-bell]')
-  if (!dropdown) {
-    showNotif.value = false
-    return
-  }
-  if (!dropdown.contains(e.target) && !(bellBtn && bellBtn.contains(e.target))) {
-    showNotif.value = false
-  }
-}
-
-// Booking functions
-function day(iso) { return new Date(iso).getDate() }
-function monthTH(iso) {
-  const m = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+function monthShortTH(iso) {
+  const m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
   return m[new Date(iso).getMonth()]
 }
-function timeRange(s, e) {
+function formatTimeRange(s, e) {
   const opt = { hour: '2-digit', minute: '2-digit' }
   return `${new Date(s).toLocaleTimeString([], opt)} - ${new Date(e).toLocaleTimeString([], opt)}`
 }
 function dateTH(iso) {
   const d = new Date(iso)
-  const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}`
+  const m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear() + 543}`
 }
 function statusTH(s) {
   switch (s) {
@@ -720,40 +644,109 @@ function statusTH(s) {
     default: return s
   }
 }
-function inviteTH(s) {
-  switch (s) {
-    case 'INVITED': return 'เชิญแล้ว'
-    case 'ACCEPTED': return 'ยืนยันแล้ว'
-    case 'DECLINED': return 'ปฏิเสธ'
-    default: return s
-  }
-}
 function badge(s) {
   if (s === 'AWAITING_ADMIN_APPROVAL') return 'bg-amber-100 text-amber-800 border border-amber-200'
   if (s === 'APPROVED') return 'bg-green-500 text-white'
   if (s === 'CANCELLED') return 'bg-gray-200 text-gray-700'
   return 'bg-blue-100 text-blue-800'
 }
+function inviteTH(s) {
+  if (s === 'INVITED') return 'เชิญแล้ว'
+  if (s === 'ACCEPTED') return 'ยืนยันแล้ว'
+  if (s === 'DECLINED') return 'ปฏิเสธ'
+  return s
+}
 function inviteTagClass(s) {
   if (s === 'ACCEPTED') return 'bg-green-100 text-green-800'
   if (s === 'DECLINED') return 'bg-red-100 text-red-800'
   return 'bg-gray-100 text-gray-700'
 }
-
+function formatTime(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+}
 function sortByNewest(a, b) {
   const ta = Date.parse(a.createdAt || a.startTime || 0)
   const tb = Date.parse(b.createdAt || b.startTime || 0)
   return tb - ta
 }
 
+// ----------------------------- Notifications -----------------------------
+async function fetchNotifications() {
+  loadingNoti.value = true
+  try {
+    const { data } = await api.get('/api/notifications')
+    notifs.value = data?.items || []
+    unreadCount.value = notifs.value.filter(n => !n.isRead).length
+  } catch (e) {
+    console.error('fetch notifications', e)
+  } finally {
+    loadingNoti.value = false
+  }
+}
+function toggleNotif() {
+  showNotif.value = !showNotif.value
+  if (showNotif.value) fetchNotifications()
+}
+function refreshNotif() {
+  return fetchNotifications()
+}
+async function markAllAsRead() {
+  try {
+    await api.post('/api/notifications/mark-all-read')
+    notifs.value = notifs.value.map(n => ({ ...n, isRead: true }))
+    unreadCount.value = 0
+  } catch (e) {
+    console.error(e)
+  }
+}
+async function markAsRead(n) {
+  try {
+    if (!n.isRead) {
+      await api.patch(`/api/notifications/${n.id}/read`)
+      n.isRead = true
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    }
+  } catch (e) {
+    console.error(e)
+  }
+}
+function goNotif(n) {
+  markAsRead(n)
+  showNotif.value = false
+  // เส้นทางอย่างง่าย
+  if (n?.refType === 'BOOKING' && n?.refId) {
+    router.push({ path: `/booking/${n.refId}` })
+  } else {
+    router.push({ path: '/admin/approvals' })
+  }
+}
+function handleClickOutside(e) {
+  const dropdown = document.querySelector('[data-noti-dropdown]')
+  const bellBtn = document.querySelector('[data-noti-bell]')
+  if (!dropdown) { showNotif.value = false; return }
+  if (!dropdown.contains(e.target) && !(bellBtn && bellBtn.contains(e.target))) {
+    showNotif.value = false
+  }
+}
+
+// ----------------------------- Data loading -----------------------------
 async function fetchList() {
-  if (!isAdmin.value) return
+  if (!isAdmin.value) { // ป้องกันค้างโหลด
+    items.value = []
+    total.value = 0
+    loading.value = false
+    return
+  }
   loading.value = true
   errorMsg.value = ''
   try {
     const PENDING_STATUSES = ['AWAITING_ADMIN_APPROVAL', 'AWAITING_ATTENDEE_CONFIRM']
     const paramsBase = { page: 1, pageSize: 500, sort: '-createdAt' }
-    const reqs = PENDING_STATUSES.map(st => api.get('/api/bookings', { params: { ...paramsBase, status: st } }))
+    const reqs = PENDING_STATUSES.map(st =>
+      api.get('/api/bookings', { params: { ...paramsBase, status: st } })
+    )
     const resps = await Promise.allSettled(reqs)
     const collected = []
     for (const r of resps) {
@@ -766,9 +759,12 @@ async function fetchList() {
     collected.forEach(it => mergedMap.set(it.id, it))
     const merged = Array.from(mergedMap.values()).sort(sortByNewest)
 
-    const kw = q.value.toLowerCase()
+    const kw = q.value.trim().toLowerCase()
     const filtered = kw
-      ? merged.filter(b => (b.room?.roomName || '').toLowerCase().includes(kw) || (b.bookedBy?.fullName || '').toLowerCase().includes(kw))
+      ? merged.filter(b =>
+          (b.room?.roomName || '').toLowerCase().includes(kw) ||
+          (b.bookedBy?.fullName || '').toLowerCase().includes(kw)
+        )
       : merged
 
     total.value = filtered.length
@@ -787,10 +783,11 @@ async function fetchList() {
   }
 }
 
+// ----------------------------- Actions -----------------------------
 async function approve(b) {
   const result = await Swal.fire({
     title: 'อนุมัติการจอง?',
-    html: `ห้อง <b>${b.room?.roomName || b.id}</b><br/>เวลา ${timeRange(b.startTime, b.endTime)}`,
+    html: `ห้อง <b>${b.room?.roomName || b.id}</b><br/>เวลา ${formatTimeRange(b.startTime, b.endTime)}`,
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#16a34a',
@@ -805,24 +802,10 @@ async function approve(b) {
     await api.post(`/api/bookings/${b.id}/approve`)
     page.value = 1
     await fetchList()
-    await Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'อนุมัติสำเร็จ',
-      showConfirmButton: false,
-      timer: 2000,
-      timerProgressBar: true
-    })
+    await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'อนุมัติสำเร็จ', showConfirmButton: false, timer: 2000, timerProgressBar: true })
   } catch (e) {
     console.error(e)
-    await Swal.fire({
-      icon: 'error',
-      title: 'อนุมัติไม่สำเร็จ',
-      text: e?.response?.data?.error || 'อนุมัติไม่สำเร็จ',
-      confirmButtonText: 'ตกลง',
-      confirmButtonColor: '#ef4444'
-    })
+    await Swal.fire({ icon: 'error', title: 'อนุมัติไม่สำเร็จ', text: e?.response?.data?.error || 'อนุมัติไม่สำเร็จ' })
   } finally {
     actingId.value = null
   }
@@ -831,7 +814,7 @@ async function approve(b) {
 async function cancel(b) {
   const result = await Swal.fire({
     title: 'ยืนยันยกเลิกการจอง?',
-    html: `ห้อง <b>${b.room?.roomName || b.id}</b><br/>เวลา ${timeRange(b.startTime, b.endTime)}`,
+    html: `ห้อง <b>${b.room?.roomName || b.id}</b><br/>เวลา ${formatTimeRange(b.startTime, b.endTime)}`,
     icon: 'warning',
     showCancelButton: true,
     confirmButtonText: 'ยกเลิกการจอง',
@@ -846,24 +829,10 @@ async function cancel(b) {
     await api.patch(`/api/bookings/${b.id}/cancel`)
     page.value = 1
     await fetchList()
-    await Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'ยกเลิกสำเร็จ',
-      showConfirmButton: false,
-      timer: 2000,
-      timerProgressBar: true
-    })
+    await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'ยกเลิกสำเร็จ', showConfirmButton: false, timer: 2000, timerProgressBar: true })
   } catch (e) {
     console.error(e)
-    await Swal.fire({
-      icon: 'error',
-      title: 'ยกเลิกไม่สำเร็จ',
-      text: e?.response?.data?.error || 'ยกเลิกไม่สำเร็จ',
-      confirmButtonText: 'ตกลง',
-      confirmButtonColor: '#ef4444'
-    })
+    await Swal.fire({ icon: 'error', title: 'ยกเลิกไม่สำเร็จ', text: e?.response?.data?.error || 'ยกเลิกไม่สำเร็จ' })
   } finally {
     actingId.value = null
   }
@@ -884,13 +853,9 @@ async function openDetail(row) {
     detailLoading.value = false
   }
 }
+function closeDetail() { showDetail.value = false }
 
-function closeDetail() {
-  showDetail.value = false
-}
-
-let notiTimer = null
-
+// ----------------------------- Lifecycle -----------------------------
 onMounted(async () => {
   await fetchMe()
   page.value = 1
@@ -899,28 +864,17 @@ onMounted(async () => {
   notiTimer = setInterval(() => fetchNotifications(), 30000)
   document.addEventListener('click', handleClickOutside)
 })
-
 onUnmounted(() => {
   if (notiTimer) clearInterval(notiTimer)
   document.removeEventListener('click', handleClickOutside)
 })
-
 watch([page, q], () => fetchList())
+watch(isAdmin, (v) => { if (v) fetchList() })
 </script>
 
 <style scoped>
-.nav-link {
-  @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900;
-}
-.nav-active {
-  @apply bg-blue-50 text-blue-600;
-}
-
-.mobile-nav-link {
-  @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900;
-}
-
-.modern-card {
-  @apply bg-white rounded-2xl border border-gray-200 p-6;
-}
+.nav-link { @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900; }
+.nav-active { @apply bg-blue-50 text-blue-600; }
+.mobile-nav-link { @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900; }
+.modern-card { @apply bg-white rounded-2xl border border-gray-200 p-6; }
 </style>

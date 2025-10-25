@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Left sidebar (same as dashboard) -->
+    <!-- Left sidebar -->
     <aside class="hidden lg:block fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-200 z-50">
       <div class="h-full flex flex-col">
         <div class="p-4 border-b border-gray-200">
@@ -59,10 +59,11 @@
         <div class="max-w-7xl mx-auto space-y-6">
           <div v-if="fetchError" class="text-red-600 p-4 rounded-lg bg-red-50 border border-red-100">Error: {{ fetchError }}</div>
 
+          <!-- ตารางงานทั้งหมดที่มอบหมายให้ฉัน -->
           <div class="modern-card">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-lg font-semibold">รายการ</h2>
-              <div class="text-sm text-gray-500">{{ items.length }} รายการ</div>
+              <div class="text-sm text-gray-500">{{ filtered.length }} รายการ</div>
             </div>
 
             <div v-if="loading" class="flex justify-center py-12 text-gray-500">กำลังโหลด...</div>
@@ -105,37 +106,87 @@
             </div>
           </div>
 
-          <div v-if="loading" class="text-gray-500">กำลังโหลด...</div>
-          <div v-if="items.length === 0 && !loading" class="text-gray-500">ไม่มีงานในคิว</div>
-          <ul class="space-y-3">
-            <li v-for="i in items" :key="i.id" class="p-3 bg-white border rounded-lg flex justify-between items-start">
-              <div>
-                <div class="font-medium">{{ i.title }}</div>
-                <div class="text-xs text-gray-500">ห้อง: {{ i.roomName || '-' }}</div>
-                <div class="text-xs text-gray-500">เวลา: {{ i.timeText || '-' }}</div>
+          <!-- การ์ดด้านล่าง: ongoing / upcoming / invitations -->
+          <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- กำลังประชุม -->
+            <div class="modern-card">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold">กำลังประชุม</h3>
+                <span class="text-xs text-gray-500">{{ myView.ongoing.length }} รายการ</span>
               </div>
-              <div class="flex flex-col gap-2">
-                <button @click="accept(i)" class="px-3 py-1 bg-sky-600 text-white rounded text-sm">รับ</button>
-                <button @click="decline(i)" class="px-3 py-1 border rounded text-sm">ปฏิเสธ</button>
+              <ul class="space-y-3">
+                <li v-for="i in myView.ongoing" :key="`og-${i.id}`" class="p-3 bg-gray-50 rounded-xl border flex justify-between items-start">
+                  <div>
+                    <div class="font-medium">ห้อง: {{ i.roomName }}</div>
+                    <div class="text-xs text-gray-500">เวลา: {{ timeRange(i.startTime, i.endTime) }}</div>
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <button @click="instantLeave(i.id)" class="px-3 py-1 bg-red-600 text-white rounded text-sm">ลากะทันหัน</button>
+                    <button @click="openFormById(i.id)" class="px-3 py-1 border rounded text-sm">บันทึก</button>
+                  </div>
+                </li>
+                <li v-if="!myView.ongoing.length" class="text-sm text-gray-500">ไม่มีรายการ</li>
+              </ul>
+            </div>
+
+            <!-- รอเริ่ม (ฉันรับแล้ว) -->
+            <div class="modern-card">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold">รอเริ่ม</h3>
+                <span class="text-xs text-gray-500">{{ myView.upcoming.length }} รายการ</span>
               </div>
-            </li>
-          </ul>
+              <ul class="space-y-3">
+                <li v-for="i in myView.upcoming" :key="`up-${i.id}`" class="p-3 bg-gray-50 rounded-xl border flex justify-between items-start">
+                  <div>
+                    <div class="font-medium">ห้อง: {{ i.roomName }}</div>
+                    <div class="text-xs text-gray-500">เวลา: {{ timeRange(i.startTime, i.endTime) }}</div>
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <button @click="instantLeave(i.id)" class="px-3 py-1 bg-orange-600 text-white rounded text-sm">ลากะทันหัน</button>
+                    <button @click="viewById(i.id)" class="px-3 py-1 border rounded text-sm">รายละเอียด</button>
+                  </div>
+                </li>
+                <li v-if="!myView.upcoming.length" class="text-sm text-gray-500">ไม่มีรายการ</li>
+              </ul>
+            </div>
+
+            <!-- ถูกเชิญ -->
+            <div class="modern-card">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold">คำเชิญ</h3>
+                <span class="text-xs text-gray-500">{{ myView.invitations.length }} รายการ</span>
+              </div>
+              <ul class="space-y-3">
+                <li v-for="i in myView.invitations" :key="`inv-${i.id}`" class="p-3 bg-gray-50 rounded-xl border flex justify-between items-start">
+                  <div>
+                    <div class="font-medium">ห้อง: {{ i.roomName }}</div>
+                    <div class="text-xs text-gray-500">เวลา: {{ timeRange(i.startTime, i.endTime) }}</div>
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <button @click="acceptInvitation(i.id)" class="px-3 py-1 bg-sky-600 text-white rounded text-sm">รับ</button>
+                    <button @click="declineInvitation(i.id)" class="px-3 py-1 border rounded text-sm">ปฏิเสธ</button>
+                  </div>
+                </li>
+                <li v-if="!myView.invitations.length" class="text-sm text-gray-500">ไม่มีรายการ</li>
+              </ul>
+            </div>
+          </section>
+
+          <!-- Modal -->
+          <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="closeForm">
+            <div class="bg-white w-full max-w-2xl rounded-2xl p-6">
+              <h3 class="text-lg font-semibold mb-4">{{ formMeeting ? 'บันทึกการประชุม' : 'สร้างรายการใหม่' }}</h3>
+              <textarea v-model="reportText" rows="8" class="w-full border rounded-md p-2" placeholder="พิมพ์บันทึก / รายงาน"></textarea>
+              <div class="mt-4 flex justify-end gap-2">
+                <button class="px-3 py-2 rounded-lg border" @click="closeForm">ยกเลิก</button>
+                <button class="px-3 py-2 rounded-lg bg-emerald-600 text-white" @click="submitReport" :disabled="submitting">
+                  {{ submitting ? 'กำลังส่ง...' : 'บันทึก / ส่งรายงาน' }}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
-    </div>
-
-    <!-- modal -->
-    <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="closeForm">
-      <div class="bg-white w-full max-w-2xl rounded-2xl p-6">
-        <h3 class="text-lg font-semibold mb-4">{{ formMeeting ? 'บันทึกการประชุม' : 'สร้างรายการใหม่' }}</h3>
-        <textarea v-model="reportText" rows="8" class="w-full border rounded-md p-2" placeholder="พิมพ์บันทึก / รายงาน"></textarea>
-        <div class="mt-4 flex justify-end gap-2">
-          <button class="px-3 py-2 rounded-lg border" @click="closeForm">ยกเลิก</button>
-          <button class="px-3 py-2 rounded-lg bg-emerald-600 text-white" @click="submitReport" :disabled="submitting">
-            {{ submitting ? 'กำลังส่ง...' : 'บันทึก / ส่งรายงาน' }}
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -149,9 +200,15 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 
 const router = useRouter()
 const route = useRoute()
+
 const loading = ref(true)
 const q = ref('')
-const items = ref([])
+const items = ref([])          // สำหรับตารางบนจาก /api/meetings
+const myView = ref({           // สำหรับการ์ดล่างจาก /api/notetakers/my-view
+  ongoing: [],
+  upcoming: [],
+  invitations: [],
+})
 const fetchError = ref('')
 
 const showForm = ref(false)
@@ -165,8 +222,8 @@ const filtered = computed(() => {
   const kw = q.value.trim().toLowerCase()
   if (!kw) return items.value
   return items.value.filter(m =>
-    (m.room?.roomName||'').toLowerCase().includes(kw) ||
-    (m.requester?.name||'').toLowerCase().includes(kw)
+    (m.room?.roomName || '').toLowerCase().includes(kw) ||
+    (m.requester?.name || '').toLowerCase().includes(kw)
   )
 })
 
@@ -176,10 +233,16 @@ function dateTH(iso){ if(!iso) return '-' ; const d=new Date(iso); const m=['ม
 function timeRange(s,e){ if(!s||!e) return '-'; const o={hour:'2-digit',minute:'2-digit'}; return `${new Date(s).toLocaleTimeString([],o)} - ${new Date(e).toLocaleTimeString([],o)}` }
 
 function view(m){ router.push(`/booking-info/${m.id}`) }
+function viewById(id){ router.push(`/booking-info/${id}`) }
+
 function openForm(m=null){
   formMeeting.value = m
   reportText.value = m?.report || ''
   showForm.value = true
+}
+function openFormById(id){
+  const target = items.value.find(x => x.id === id)
+  if (target) openForm(target)
 }
 function closeForm(){ showForm.value = false; formMeeting.value = null; reportText.value = '' }
 function viewReport(m){ router.push({ path: '/note-taker/my-queue', query: { focusId: m.id, viewReport: 1 } }) }
@@ -201,15 +264,30 @@ async function load(){
   loading.value = true
   fetchError.value = ''
   try{
-    const res = await api.get('/api/meetings', { params: { assignedTo: 'me', sort:'nearest', page:1, pageSize:200 } })
-    const data = res.data
+    // ตารางบน
+    const [meetRes, myViewRes] = await Promise.all([
+      api.get('/api/meetings', { params: { assignedTo: 'me', sort:'nearest', page:1, pageSize:200 } }),
+      api.get('/api/notetakers/my-view', { params: { limit: 5 } }),
+    ])
+
+    const data = meetRes.data
     items.value = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
-    // optional: fetch user profile
-    try { const u = await api.get('/api/me'); me.value = u.data || me.value } catch(_) {}
+
+    // การ์ดล่าง
+    myView.value = {
+      ongoing: myViewRes.data?.ongoing || [],
+      upcoming: myViewRes.data?.upcoming || [],
+      invitations: myViewRes.data?.invitations || [],
+    }
+
+    // โปรไฟล์ (optional)
+    try { const u = await api.get('/api/me'); me.value = u.data?.me || u.data || me.value } catch(_) {}
+
+    // โฟกัสรายการ
     const fid = route.query.focusId
-    if(fid) {
-      const target = items.value.find(x=>String(x.id) === String(fid))
-      if(target && route.query.openForm) openForm(target)
+    if (fid) {
+      const target = items.value.find(x => String(x.id) === String(fid))
+      if (target && route.query.openForm) openForm(target)
     }
   } catch(e){
     console.error('load my queue', e)
@@ -226,36 +304,47 @@ async function logout(){
   router.push('/login')
 }
 
-/** rotate top N (admin only) */
-async function rotateQueue(take = 1) {
-  try {
-    const res = await api.post('/api/notetakers/rotate', { take })
-    if (res.data?.ok) {
-      await loadQueue()
-      return true
-    }
-    return false
-  } catch (e) {
-    console.error('rotateQueue', e)
-    alert('หมุนคิวไม่สำเร็จ')
-    return false
+/** ลากะทันหัน (ประกาศไม่ว่างสำหรับ booking นั้นทันที) */
+async function instantLeave(bookingId){
+  const c = await Swal.fire({ title:'ยืนยัน', text:'ประกาศไม่ว่างและขอคนแทนทันที?', icon:'warning', showCancelButton:true, confirmButtonText:'ยืนยัน' })
+  if (!c.isConfirmed) return
+  try{
+    await api.patch('/api/notetakers/availability/unavailable', { bookingId })
+    Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ประกาศไม่ว่างแล้ว', timer:1400, showConfirmButton:false })
+    await load()
+  }catch(e){
+    Swal.fire({ icon:'error', title:'ไม่สำเร็จ', text: e?.response?.data?.error || e.message })
   }
 }
 
-async function accept(it){
-  const c = await Swal.fire({ title:'ยืนยัน', text:'รับงานนี้หรือไม่?', icon:'question', showCancelButton:true, confirmButtonText:'รับ' }); if(!c.isConfirmed) return
-  try { await api.post(`/api/note-taker/accept/${it.id}`); Swal.fire({ toast:true, position:'top-end', icon:'success', title:'รับงานแล้ว', timer:1400, showConfirmButton:false }); load() } catch(e){ Swal.fire({ icon:'error', title:'ผิดพลาด' }) }
+/** กลับมาว่างสำหรับ booking นั้น (ตั้งเป็น ACCEPTED) */
+async function backAvailable(bookingId){
+  try{
+    await api.patch('/api/notetakers/availability/available', { bookingId })
+    Swal.fire({ toast:true, position:'top-end', icon:'success', title:'กลับมาว่างแล้ว', timer:1400, showConfirmButton:false })
+    await load()
+  }catch(e){
+    Swal.fire({ icon:'error', title:'ไม่สำเร็จ', text: e?.response?.data?.error || e.message })
+  }
 }
 
-async function decline(it){
-  const c = await Swal.fire({ title:'ยืนยัน', text:'ปฏิเสธงานนี้หรือไม่?', icon:'warning', showCancelButton:true, confirmButtonText:'ปฏิเสธ' }); if(!c.isConfirmed) return
-  try { await api.post(`/api/note-taker/decline/${it.id}`); Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ปฏิเสธแล้ว', timer:1400, showConfirmButton:false }); load() } catch(e){ Swal.fire({ icon:'error', title:'ผิดพลาด' }) }
+/** รับคำเชิญ: ใช้ available() เพื่อ set ACCEPTED + invite ACCEPTED */
+async function acceptInvitation(bookingId){
+  const ok = await Swal.fire({ title:'ยืนยัน', text:'รับงานนี้หรือไม่?', icon:'question', showCancelButton:true, confirmButtonText:'รับ' })
+  if (!ok.isConfirmed) return
+  await backAvailable(bookingId)
+}
+
+/** ปฏิเสธคำเชิญ: ใช้ unavailable() เพื่อ set REPLACED + invite DECLINED */
+async function declineInvitation(bookingId){
+  const ok = await Swal.fire({ title:'ยืนยัน', text:'ปฏิเสธงานนี้หรือไม่?', icon:'warning', showCancelButton:true, confirmButtonText:'ปฏิเสธ' })
+  if (!ok.isConfirmed) return
+  await instantLeave(bookingId)
 }
 </script>
 
 <style scoped>
 .nav-link { @apply block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-100; }
 .nav-active { @apply bg-blue-50 text-blue-600; }
-
 .modern-card { @apply bg-white rounded-2xl border border-gray-200 p-6; }
 </style>

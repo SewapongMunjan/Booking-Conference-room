@@ -37,14 +37,12 @@
       <div class="w-full px-8 py-4 flex items-center max-w-7xl mx-auto">
         <h1 class="text-lg font-semibold m-0">ลาล่วงหน้า</h1>
         <div class="ml-auto flex items-center gap-3"></div>
-                <div class="ml-auto flex items-center gap-3">
+        <div class="ml-auto flex items-center gap-3">
           <div class="relative hidden sm:block">
             <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">⌕</span>
-            <input v-model="q" placeholder="ค้นหา ห้อง / ผู้จอง / ผู้จด..." class="w-64 pl-10 pr-3 py-2 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+            <input v-model="q" placeholder="ค้นหาเหตุผล/ช่วงวัน..." class="w-64 pl-10 pr-3 py-2 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
-
           <button class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="load">รีเฟรช</button>
-
           <button @click="logout" class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm border border-gray-200 hover:bg-gray-50">
             <svg class="w-5 h-5 text-red-600 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1"/></svg>
             <span class="hidden md:inline text-red-600">ออกจากระบบ</span>
@@ -82,7 +80,7 @@
             <section class="lg:col-span-2 modern-card">
               <div class="flex items-center justify-between mb-4">
                 <h3 class="font-medium">ประวัติการลา</h3>
-                <div class="text-sm text-gray-500">{{ leaves.length }} รายการ</div>
+                <div class="text-sm text-gray-500">{{ filteredLeaves.length }} รายการ</div>
               </div>
 
               <div v-if="loading" class="text-gray-500 py-8">กำลังโหลด...</div>
@@ -94,19 +92,32 @@
                       <th class="px-4 py-3 text-left">วันที่</th>
                       <th class="px-4 py-3 text-left">เหตุผล</th>
                       <th class="px-4 py-3 text-left">สถานะ</th>
+                      <th class="px-4 py-3 text-right">จัดการ</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y">
-                    <tr v-for="l in leaves" :key="l.id">
-                      <td class="px-4 py-3">{{ formatRange(l.from, l.to) }}</td>
-                      <td class="px-4 py-3">{{ l.reason }}</td>
+                    <tr v-for="l in filteredLeaves" :key="l.id">
+                      <td class="px-4 py-3">
+                        <template v-if="l.date">
+                          {{ dateTH(l.date) }}
+                        </template>
+                        <template v-else>
+                          {{ formatRange(l.from, l.to) }}
+                        </template>
+                      </td>
+                      <td class="px-4 py-3">{{ l.reason || '-' }}</td>
                       <td class="px-4 py-3">
                         <span class="px-2 py-1 rounded-full text-xs" :class="leaveBadge(l.status)">{{ leaveStatusTH(l.status) }}</span>
                         <div v-if="l.conflicts?.length" class="text-sm text-rose-600 mt-1">⚠︎ มีคิวต้องแทน: {{ l.conflicts.map(c=>c.roomName).join(', ') }}</div>
                       </td>
+                      <td class="px-4 py-3">
+                        <div class="flex justify-end">
+                          <button v-if="l.date" @click="cancelLeave(l.date)" class="px-3 py-1.5 rounded border text-sm">ยกเลิก</button>
+                        </div>
+                      </td>
                     </tr>
-                    <tr v-if="!leaves.length">
-                      <td colspan="3" class="px-4 py-6 text-center text-gray-500">ไม่มีประวัติ</td>
+                    <tr v-if="!filteredLeaves.length">
+                      <td colspan="4" class="px-4 py-6 text-center text-gray-500">ไม่มีประวัติ</td>
                     </tr>
                   </tbody>
                 </table>
@@ -117,16 +128,14 @@
           <!-- New Request Section -->
           <div class="modern-card p-6">
             <h3 class="font-medium mb-4">คำขอลาใหม่</h3>
-
             <div class="mb-4">
               <button @click="newRequest" class="px-3 py-2 bg-sky-600 text-white rounded">สร้างคำขอใหม่</button>
             </div>
-
             <div v-if="requests.length === 0" class="text-gray-500">ยังไม่มีคำขอ</div>
             <ul class="space-y-3">
               <li v-for="r in requests" :key="r.id" class="p-3 bg-white border rounded-lg">
-                <div class="font-medium">{{ r.type }} - {{ r.status }}</div>
-                <div class="text-xs text-gray-500">{{ r.period }}</div>
+                <div class="font-medium">{{ r.type || 'ขอช่วยแทน' }} - {{ r.status || 'ส่งแล้ว' }}</div>
+                <div class="text-xs text-gray-500">{{ r.period || '-' }}</div>
               </li>
             </ul>
           </div>
@@ -137,14 +146,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 
-// ===== state =====
-const q = ref('')                 // <— แก้ warning: q ไม่ได้ประกาศ
+const q = ref('')
 const router = useRouter()
 
 const from = ref('')
@@ -155,20 +163,36 @@ const loading = ref(true)
 const leaves = ref([])
 const requests = ref([])
 const fetchError = ref('')
-
 const me = ref({ name: '', email: '', avatarUrl: '' })
 
-// ===== helpers =====
+// ========== helpers ==========
+function pad(n){ return String(n).padStart(2, '0') }
+function yyyy_mm_dd(d){
+  const y = d.getFullYear(), m = pad(d.getMonth()+1), dd = pad(d.getDate())
+  return `${y}-${m}-${dd}`
+}
+function* eachDate(aStr, bStr){
+  const a = new Date(aStr), b = new Date(bStr || aStr)
+  for (let d = new Date(a); d <= b; d.setDate(d.getDate()+1)) {
+    yield yyyy_mm_dd(d)
+  }
+}
 function leaveStatusTH(s){
   if (s === 'PENDING') return 'รออนุมัติ'
   if (s === 'APPROVED') return 'อนุมัติแล้ว'
   if (s === 'REJECTED') return 'ไม่อนุมัติ'
-  return s || '-'
+  return 'อนุมัติแล้ว' // ค่าเริ่มต้นของ leave รายวัน
 }
 function leaveBadge(s){
   if (s === 'PENDING') return 'bg-amber-100 text-amber-800'
-  if (s === 'APPROVED') return 'bg-green-100 text-green-700'
+  if (s === 'APPROVED' || !s) return 'bg-green-100 text-green-700'
   return 'bg-gray-100 text-gray-700'
+}
+function dateTH(iso){
+  if(!iso) return '-'
+  const d=new Date(iso)
+  const m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}`
 }
 function formatRange(f, t){
   if (!f || !t) return '-'
@@ -176,88 +200,100 @@ function formatRange(f, t){
   return `${a.getDate()}/${a.getMonth()+1}/${a.getFullYear()+543} - ${b.getDate()}/${b.getMonth()+1}/${b.getFullYear()+543}`
 }
 
-// ===== api calls =====
+// filter ประวัติ
+const filteredLeaves = computed(() => {
+  const kw = q.value.trim().toLowerCase()
+  const arr = Array.isArray(leaves.value) ? leaves.value : []
+  if (!kw) return arr
+  return arr.filter(l =>
+    (l.reason || '').toLowerCase().includes(kw) ||
+    (l.date ? dateTH(l.date) : formatRange(l.from, l.to)).toLowerCase().includes(kw)
+  )
+})
+
+// ========== API calls ==========
 async function load(){
   loading.value = true
   fetchError.value = ''
   try{
-    // ✅ ให้ตรงกับ notetakers.ts
-    const res  = await api.get('/api/notetakers/leaves',   { params: { createdBy: 'me', page: 1, pageSize: 200 } })
-    const res2 = await api.get('/api/notetakers/requests')
+    // default: ย้อนหลัง 60 วัน ถึง อีก 60 วัน
+    const today = new Date()
+    const start = new Date(today); start.setDate(start.getDate() - 60)
+    const end   = new Date(today); end.setDate(end.getDate() + 60)
 
-    const data = res.data
-    leaves.value   = Array.isArray(data?.items)       ? data.items       : (Array.isArray(data) ? data : [])
-    requests.value = Array.isArray(res2.data?.items)  ? res2.data.items  : (Array.isArray(res2.data) ? res2.data : [])
+    const [leRes, reqRes] = await Promise.all([
+      api.get('/api/notetakers/leaves', { params: { start: yyyy_mm_dd(start), end: yyyy_mm_dd(end) } }),
+      api.get('/api/notetakers/requests')
+    ])
+
+    leaves.value   = Array.isArray(leRes.data?.items) ? leRes.data.items : []
+    requests.value = Array.isArray(reqRes.data?.items) ? reqRes.data.items : []
 
     // โปรไฟล์ (optional)
-    try {
-      const u = await api.get('/api/me')
-      me.value = u.data || me.value
-    } catch (_) {}
+    try { const u = await api.get('/api/me'); me.value = u.data?.me || u.data || me.value } catch(_) {}
   } catch(e){
     console.error('load leaves', e)
     fetchError.value = e?.response?.data?.error || e.message || 'load failed'
-  } finally {
-    loading.value = false
-  }
+  } finally { loading.value = false }
 }
 
-async function loadRequests(){
-  try{
-    const res = await api.get('/api/notetakers/requests')
-    requests.value = res?.data?.items ?? res?.data ?? []
-  }catch(_){
-    requests.value = []
-  }
-}
-
-function newRequest(){
-  Swal.fire({
+async function newRequest(){
+  const r = await Swal.fire({
     title: 'ขอความช่วยเหลือ/แทนที่',
     html: `
-      <input id="start" class="swal2-input" placeholder="จากวันที่ (mm/dd/yyyy)">
-      <input id="end" class="swal2-input" placeholder="ถึงวันที่ (mm/dd/yyyy)">
+      <input id="start" class="swal2-input" placeholder="จากวันที่ (YYYY-MM-DD)">
+      <input id="end" class="swal2-input" placeholder="ถึงวันที่ (YYYY-MM-DD)">
     `,
     focusConfirm: false,
     preConfirm: () => {
-      const sEl = document.getElementById('start')
-      const eEl = document.getElementById('end')
-      const start = sEl && 'value' in sEl ? sEl.value : ''
-      const end   = eEl && 'value' in eEl ? eEl.value : ''
-      return { start, end }
-    }
-  }).then(async (r) => {
-    if (!r.isConfirmed) return
-    const payload = { start: r.value.start, end: r.value.end }
-    try{
-      await api.post('/api/notetakers/requests', payload)
-      Swal.fire({ icon: 'success', title: 'ส่งคำขอแล้ว' })
-      loadRequests()
-    }catch(e){
-      console.error('newRequest', e)
-      Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ' })
+      const s = (document.getElementById('start') || {}).value || ''
+      const e = (document.getElementById('end')   || {}).value || ''
+      return { start: s, end: e }
     }
   })
+  if (!r.isConfirmed) return
+  try{
+    await api.post('/api/notetakers/requests', { start: r.value.start, end: r.value.end })
+    Swal.fire({ icon: 'success', title: 'ส่งคำขอแล้ว' })
+    const res = await api.get('/api/notetakers/requests')
+    requests.value = res.data?.items || []
+  }catch(e){
+    console.error('newRequest', e)
+    Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ' })
+  }
 }
 
+/** ส่งลาแบบช่วงวัน → แปลงเป็น daily leave: POST /api/notetakers/leave ทีละวัน */
 async function submitLeave(){
-  if (!from.value || !to.value || !reason.value) {
-    alert('กรุณากรอกข้อมูลให้ครบ')
-    return
-  }
+  if (!from.value || !reason.value) { alert('กรุณากรอกวันที่เริ่มและเหตุผล'); return }
+  const toVal = to.value || from.value
+
   submitting.value = true
   try{
-    await api.post('/api/notetakers/leaves', { from: from.value, to: to.value, reason: reason.value })
-    from.value = ''
-    to.value = ''
-    reason.value = ''
+    for (const d of eachDate(from.value, toVal)) {
+      await api.post('/api/notetakers/leave', { date: d, reason: reason.value })
+    }
+    from.value = ''; to.value = ''; reason.value = ''
     await load()
+    Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ส่งคำลาแล้ว', timer:1400, showConfirmButton:false })
   } catch(e){
     console.error('submit leave', e)
     fetchError.value = e?.response?.data?.error || e.message || 'submit failed'
     alert('ส่งไม่สำเร็จ')
   } finally {
     submitting.value = false
+  }
+}
+
+async function cancelLeave(dateIso){
+  const ok = await Swal.fire({ title:'ยกเลิกการลาวันนี้?', text: dateIso, icon:'warning', showCancelButton:true, confirmButtonText:'ยืนยัน' })
+  if (!ok.isConfirmed) return
+  try{
+    await api.delete('/api/notetakers/leave', { params: { date: dateIso } })
+    await load()
+    Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ยกเลิกแล้ว', timer:1200, showConfirmButton:false })
+  }catch(e){
+    Swal.fire({ icon:'error', title:'ไม่สำเร็จ', text: e?.response?.data?.error || e.message })
   }
 }
 
@@ -268,17 +304,11 @@ async function logout(){
   router.push('/login')
 }
 
-// ===== lifecycle =====
-onMounted(() => {
-  load()
-  loadRequests()
-})
+onMounted(load)
 </script>
-
 
 <style scoped>
 .nav-link { @apply block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-100; }
 .nav-active { @apply bg-blue-50 text-blue-600; }
-
 .modern-card { @apply bg-white rounded-2xl border border-gray-200 p-6; }
 </style>

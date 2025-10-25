@@ -12,7 +12,7 @@ import { Server as IOServer } from "socket.io";
 import { prisma } from "./prisma";
 
 // Routers
-import authRouter from "./routes/auth";
+import authRouter, { meLegacyRouter } from "./routes/auth";
 import roomsRouter from "./routes/rooms";
 import bookingsRouter from "./routes/bookings";
 import metaRoutes from "./routes/meta";
@@ -21,6 +21,8 @@ import notetakersRouter from "./routes/notetakers";
 import notificationsRouter from "./routes/notifications";
 import housekeepingRoutes from "./routes/housekeeping";
 import meetings from "./routes/meetings";
+
+
 // ====== Config ======
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -72,6 +74,7 @@ app.get("/health", async (_req: Request, res: Response) => {
 
 // ====== Routes ======
 app.use("/api/auth", authRouter);
+app.use("/api/me", meLegacyRouter);
 app.use("/api/rooms", roomsRouter);
 app.use("/api/bookings", bookingsRouter);
 app.use("/api", metaRoutes);
@@ -80,6 +83,7 @@ app.use("/api/notetakers", notetakersRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/housekeeping", housekeepingRoutes);
 app.use("/api", meetings);
+
 
 // ====== 404 ======
 app.use((_req: Request, res: Response) => {

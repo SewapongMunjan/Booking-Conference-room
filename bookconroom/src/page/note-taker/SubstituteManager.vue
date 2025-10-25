@@ -36,22 +36,25 @@
     <header class="fixed top-0 right-0 left-0 lg:left-64 z-40 bg-white border-b border-gray-200">
       <div class="w-full px-8 py-4 flex items-center max-w-7xl mx-auto">
         <h1 class="text-lg font-semibold m-0">จัดการแทนคนลา</h1>
-                <div class="ml-auto flex items-center gap-3">
-          <div class="relative hidden sm:block">
-            <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">⌕</span>
-            <input v-model="q" placeholder="ค้นหา ห้อง / ผู้จอง / ผู้จด..." class="w-64 pl-10 pr-3 py-2 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+
+        <div class="ml-auto flex items-center gap-3">
+          <div class="hidden md:flex items-center gap-2">
+            <label class="text-sm text-gray-600">เลือกวันที่</label>
+            <input type="date" v-model="selectedDate" class="border rounded-lg px-2 py-1 text-sm" @change="onChangeDate" />
           </div>
 
-          <button class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="load">รีเฟรช</button>
+          <div class="relative hidden sm:block">
+            <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">⌕</span>
+            <input v-model="q" placeholder="ค้นหา ห้อง / ผู้จด..." class="w-64 pl-10 pr-3 py-2 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
 
+          <button class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="load(selectedDate)">รีเฟรช</button>
           <button @click="logout" class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm border border-gray-200 hover:bg-gray-50">
             <svg class="w-5 h-5 text-red-600 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1"/></svg>
             <span class="hidden md:inline text-red-600">ออกจากระบบ</span>
           </button>
         </div>
       </div>
-      <div class="flex items-center gap-3 ml-auto">
-        </div>
     </header>
 
     <!-- Main content -->
@@ -62,20 +65,28 @@
 
           <div class="modern-card">
             <div class="flex items-center justify-between mb-4">
-              <h2 class="text-lg font-semibold">จัดการการลา/แทน</h2>
-              <button @click="openNew" class="px-3 py-2 bg-sky-600 text-white rounded">ขอแทน</button>
+              <h2 class="text-lg font-semibold">รายการต้องหา “ผู้จดแทน” ({{ filtered.length }} รายการ)</h2>
             </div>
 
-            <div v-if="items.length === 0" class="text-gray-500">ไม่มีรายการ</div>
-            <ul class="space-y-3">
-              <li v-for="s in items" :key="s.id" class="p-3 bg-white border rounded-lg flex justify-between">
+            <div v-if="loading" class="text-gray-500">กำลังโหลด...</div>
+            <div v-else-if="filtered.length === 0" class="text-gray-500">
+              ไม่มีรายการในวันที่เลือก
+              <div class="text-xs text-gray-400 mt-1">* เลือกวันที่ให้ตรงกับวันที่ลาที่เห็นใน “ลาล่วงหน้า”</div>
+            </div>
+
+            <ul class="space-y-3" v-else>
+              <li v-for="s in filtered" :key="s.id" class="p-3 bg-white border rounded-lg flex flex-wrap justify-between gap-3 items-start">
                 <div>
-                  <div class="font-medium">{{ s.title }}</div>
-                  <div class="text-xs text-gray-500">{{ s.period }}</div>
+                  <div class="font-medium">
+                    ห้อง: <span class="text-gray-700">{{ s.room?.roomName || '-' }}</span>
+                  </div>
+                  <div class="text-xs text-gray-500">เวลา: {{ timeRange(s.startTime, s.endTime) }}</div>
+                  <div class="text-xs text-rose-600 mt-1" v-if="s.unavailableUsers?.length">
+                    ผู้จดที่ลางาน: {{ s.unavailableUsers.map(u => u.fullName).join(', ') }}
+                  </div>
                 </div>
                 <div class="flex gap-2">
-                  <button @click="approve(s)" class="px-3 py-1 bg-green-600 text-white rounded">อนุมัติ</button>
-                  <button @click="deny(s)" class="px-3 py-1 border rounded">ปฏิเสธ</button>
+                  <button @click="openAssign(s)" class="px-3 py-1.5 bg-blue-600 text-white rounded">เลือกคนแทน</button>
                 </div>
               </li>
             </ul>
@@ -88,12 +99,17 @@
     <div v-if="showAssign" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="closeAssign">
       <div class="bg-white w-full max-w-lg rounded-2xl p-6">
         <h3 class="text-lg font-semibold mb-4">เลือกคนจดประชุมแทน</h3>
+
+        <div v-if="candidateError" class="mb-3 text-red-600 text-sm">{{ candidateError }}</div>
+
         <div class="mb-4">
           <select v-model="selectedTaker" class="w-full p-2 border rounded-md">
             <option value="">-- เลือก --</option>
             <option v-for="t in takers" :key="t.id" :value="t.id">{{ t.name }}</option>
           </select>
+          <div v-if="takers.length===0" class="text-sm text-gray-500 mt-2">ยังไม่พบผู้จดที่ว่างในช่วงเวลานี้</div>
         </div>
+
         <div class="flex justify-end gap-2">
           <button class="px-3 py-2 rounded-lg border" @click="closeAssign">ยกเลิก</button>
           <button class="px-4 py-2 rounded-lg bg-blue-600 text-white" @click="assign" :disabled="assigning || !selectedTaker">
@@ -115,37 +131,54 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 const router = useRouter()
 
 // ===== state =====
-const q = ref('')                       // <-- template ใช้อยู่
+const q = ref('')
 const loading = ref(true)
 const fetchError = ref('')
 
-const requests = ref([])                // งานที่ต้องหาแทน (จาก /leaves/pending)
-const items = computed(() => requests.value || [])   // <-- ให้ template ที่อ้าง items ใช้ได้
-
+const requests = ref([])   // จาก /api/notetakers/leaves/pending (ของทุกคนในวันนั้น)
 const me = ref({ name: '', email: '', avatarUrl: '' })
+
+// วันที่ที่จะดึง "pending" (ค่าเริ่มต้น = วันนี้)
+const selectedDate = ref(new Date().toISOString().slice(0,10))
 
 // modal เลือกผู้แทน
 const showAssign = ref(false)
 const currentReq = ref(null)
-const candidates = ref([])              // ผู้แทนที่ว่างในช่วงเวลา
+const candidates = ref([])          // /api/notetakers/candidates
 const candidateError = ref('')
 const selectedTaker = ref('')
 const assigning = ref(false)
 
-// ===== helpers =====
-function formatRange(f, t) {
-  if (!f || !t) return '-'
-  const a = new Date(f), b = new Date(t)
-  return `${a.getDate()}/${a.getMonth()+1}/${a.getFullYear()+543} - ${b.getDate()}/${b.getMonth()+1}/${b.getFullYear()+543}`
+// ===== computed / helpers =====
+const filtered = computed(() => {
+  const kw = q.value.trim().toLowerCase()
+  let arr = Array.isArray(requests.value) ? requests.value : []
+  if (!kw) return arr
+  return arr.filter(s =>
+    (s.room?.roomName || '').toLowerCase().includes(kw) ||
+    (s.unavailableUsers || []).some(u => (u.fullName || '').toLowerCase().includes(kw))
+  )
+})
+
+const takers = computed(() =>
+  (candidates.value || []).map(c => ({
+    id: c.userId,                                 // API คืน userId
+    name: c.user?.fullName || `User #${c.userId}`, // แปลงเป็นชื่อ
+  }))
+)
+
+function timeRange(s,e){
+  if(!s||!e) return '-'
+  const o={hour:'2-digit',minute:'2-digit'}
+  return `${new Date(s).toLocaleTimeString([],o)} - ${new Date(e).toLocaleTimeString([],o)}`
 }
-function toISO(d) { return new Date(d).toISOString() }
+function toISO(d){ return new Date(d).toISOString() }
 
 // ===== API =====
-async function load(dateStr = null) {
+async function load(dateStr) {
   loading.value = true
   fetchError.value = ''
   try {
-    // backend: /api/notetakers/leaves/pending
     const params = dateStr ? { date: dateStr } : {}
     const { data } = await api.get('/api/notetakers/leaves/pending', { params })
     requests.value = Array.isArray(data?.items) ? data.items : []
@@ -156,6 +189,10 @@ async function load(dateStr = null) {
   } finally {
     loading.value = false
   }
+}
+
+function onChangeDate(){
+  load(selectedDate.value)
 }
 
 async function loadCandidates(startIso, endIso, excludeIds = []) {
@@ -200,7 +237,7 @@ async function assign() {
       substituteUserId: Number(selectedTaker.value),
     })
     Swal.fire({ icon: 'success', title: 'เปลี่ยนผู้จดแล้ว' })
-    await load()
+    await load(selectedDate.value)
     closeAssign()
   } catch (e) {
     console.error('assign failed', e)
@@ -219,15 +256,12 @@ async function logout() {
 }
 
 onMounted(() => {
-  load() // วันนี้
+  load(selectedDate.value) // โหลดตามวันที่เลือก (เริ่มต้น = วันนี้)
 })
 </script>
-
-
 
 <style scoped>
 .nav-link { @apply block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-100; }
 .nav-active { @apply bg-blue-50 text-blue-600; }
-
 .modern-card { @apply bg-white rounded-2xl border border-gray-200 p-6; }
 </style>
