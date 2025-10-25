@@ -143,6 +143,8 @@ import api from '@/lib/api.js'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 
+// ===== state =====
+const q = ref('')                 // <— แก้ warning: q ไม่ได้ประกาศ
 const router = useRouter()
 
 const from = ref('')
@@ -156,45 +158,107 @@ const fetchError = ref('')
 
 const me = ref({ name: '', email: '', avatarUrl: '' })
 
-function leaveStatusTH(s){ if(s==='PENDING') return 'รออนุมัติ'; if(s==='APPROVED') return 'อนุมัติแล้ว'; if(s==='REJECTED') return 'ไม่อนุมัติ'; return s||'-' }
-function leaveBadge(s){ if(s==='PENDING') return 'bg-amber-100 text-amber-800'; if(s==='APPROVED') return 'bg-green-100 text-green-700'; return 'bg-gray-100 text-gray-700' }
-function formatRange(f,t){ if(!f||!t) return '-'; const a=new Date(f), b=new Date(t); return `${a.getDate()}/${a.getMonth()+1}/${a.getFullYear()+543} - ${b.getDate()}/${b.getMonth()+1}/${b.getFullYear()+543}` }
+// ===== helpers =====
+function leaveStatusTH(s){
+  if (s === 'PENDING') return 'รออนุมัติ'
+  if (s === 'APPROVED') return 'อนุมัติแล้ว'
+  if (s === 'REJECTED') return 'ไม่อนุมัติ'
+  return s || '-'
+}
+function leaveBadge(s){
+  if (s === 'PENDING') return 'bg-amber-100 text-amber-800'
+  if (s === 'APPROVED') return 'bg-green-100 text-green-700'
+  return 'bg-gray-100 text-gray-700'
+}
+function formatRange(f, t){
+  if (!f || !t) return '-'
+  const a = new Date(f), b = new Date(t)
+  return `${a.getDate()}/${a.getMonth()+1}/${a.getFullYear()+543} - ${b.getDate()}/${b.getMonth()+1}/${b.getFullYear()+543}`
+}
 
+// ===== api calls =====
 async function load(){
   loading.value = true
   fetchError.value = ''
   try{
-    const res = await api.get('/api/leaves', { params: { createdBy: 'me', page:1, pageSize:200 } })
+    // ✅ ให้ตรงกับ notetakers.ts
+    const res  = await api.get('/api/notetakers/leaves',   { params: { createdBy: 'me', page: 1, pageSize: 200 } })
+    const res2 = await api.get('/api/notetakers/requests')
+
     const data = res.data
-    leaves.value = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
-    // try user profile
-    try { const u = await api.get('/api/me'); me.value = u.data || me.value } catch(_) {}
+    leaves.value   = Array.isArray(data?.items)       ? data.items       : (Array.isArray(data) ? data : [])
+    requests.value = Array.isArray(res2.data?.items)  ? res2.data.items  : (Array.isArray(res2.data) ? res2.data : [])
+
+    // โปรไฟล์ (optional)
+    try {
+      const u = await api.get('/api/me')
+      me.value = u.data || me.value
+    } catch (_) {}
   } catch(e){
     console.error('load leaves', e)
     fetchError.value = e?.response?.data?.error || e.message || 'load failed'
-  } finally { loading.value = false }
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadRequests(){
-  try { const res = await api.get('/api/note-taker/requests').catch(()=>null); requests.value = res?.data?.items ?? res?.data ?? [] } catch(e){ requests.value = [] }
+  try{
+    const res = await api.get('/api/notetakers/requests')
+    requests.value = res?.data?.items ?? res?.data ?? []
+  }catch(_){
+    requests.value = []
+  }
 }
 
 function newRequest(){
-  Swal.fire({ title:'คำขอลา', html:`<input id="start" class="swal2-input" placeholder="จากวันที่"> <input id="end" class="swal2-input" placeholder="ถึงวันที่">`, preConfirm: () => { const s = document.getElementById('start').value; const e = document.getElementById('end').value; return { start: s, end: e } } }).then(async (r)=>{ if(!r.isConfirmed) return; try{ await api.post('/api/note-taker/requests', r.value); Swal.fire({icon:'success', title:'ส่งคำขอแล้ว'}); loadRequests() }catch(e){ Swal.fire({icon:'error', title:'ไม่สำเร็จ'}) } })
+  Swal.fire({
+    title: 'ขอความช่วยเหลือ/แทนที่',
+    html: `
+      <input id="start" class="swal2-input" placeholder="จากวันที่ (mm/dd/yyyy)">
+      <input id="end" class="swal2-input" placeholder="ถึงวันที่ (mm/dd/yyyy)">
+    `,
+    focusConfirm: false,
+    preConfirm: () => {
+      const sEl = document.getElementById('start')
+      const eEl = document.getElementById('end')
+      const start = sEl && 'value' in sEl ? sEl.value : ''
+      const end   = eEl && 'value' in eEl ? eEl.value : ''
+      return { start, end }
+    }
+  }).then(async (r) => {
+    if (!r.isConfirmed) return
+    const payload = { start: r.value.start, end: r.value.end }
+    try{
+      await api.post('/api/notetakers/requests', payload)
+      Swal.fire({ icon: 'success', title: 'ส่งคำขอแล้ว' })
+      loadRequests()
+    }catch(e){
+      console.error('newRequest', e)
+      Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ' })
+    }
+  })
 }
 
 async function submitLeave(){
-  if(!from.value || !to.value || !reason.value) return alert('กรุณากรอกข้อมูลให้ครบ')
+  if (!from.value || !to.value || !reason.value) {
+    alert('กรุณากรอกข้อมูลให้ครบ')
+    return
+  }
   submitting.value = true
   try{
-    await api.post('/api/leaves', { from: from.value, to: to.value, reason: reason.value })
-    from.value = to.value = reason.value = ''
+    await api.post('/api/notetakers/leaves', { from: from.value, to: to.value, reason: reason.value })
+    from.value = ''
+    to.value = ''
+    reason.value = ''
     await load()
   } catch(e){
     console.error('submit leave', e)
     fetchError.value = e?.response?.data?.error || e.message || 'submit failed'
     alert('ส่งไม่สำเร็จ')
-  } finally { submitting.value = false }
+  } finally {
+    submitting.value = false
+  }
 }
 
 async function logout(){
@@ -204,11 +268,13 @@ async function logout(){
   router.push('/login')
 }
 
+// ===== lifecycle =====
 onMounted(() => {
   load()
   loadRequests()
 })
 </script>
+
 
 <style scoped>
 .nav-link { @apply block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-100; }

@@ -106,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
 import Swal from 'sweetalert2'
@@ -114,119 +114,116 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 
 const router = useRouter()
 
+// ===== state =====
+const q = ref('')                       // <-- template ใช้อยู่
 const loading = ref(true)
-const requests = ref([])
-const takers = ref([])
-
-const showAssign = ref(false)
-const currentReq = ref(null)
-const selectedTaker = ref('')
-const assigning = ref(false)
 const fetchError = ref('')
 
+const requests = ref([])                // งานที่ต้องหาแทน (จาก /leaves/pending)
+const items = computed(() => requests.value || [])   // <-- ให้ template ที่อ้าง items ใช้ได้
+
 const me = ref({ name: '', email: '', avatarUrl: '' })
-const items = ref([])
 
-function formatRange(f,t){ if(!f||!t) return '-'; const a=new Date(f), b=new Date(t); return `${a.getDate()}/${a.getMonth()+1}/${a.getFullYear()+543} - ${b.getDate()}/${b.getMonth()+1}/${b.getFullYear()+543}` }
+// modal เลือกผู้แทน
+const showAssign = ref(false)
+const currentReq = ref(null)
+const candidates = ref([])              // ผู้แทนที่ว่างในช่วงเวลา
+const candidateError = ref('')
+const selectedTaker = ref('')
+const assigning = ref(false)
 
-async function load(){
+// ===== helpers =====
+function formatRange(f, t) {
+  if (!f || !t) return '-'
+  const a = new Date(f), b = new Date(t)
+  return `${a.getDate()}/${a.getMonth()+1}/${a.getFullYear()+543} - ${b.getDate()}/${b.getMonth()+1}/${b.getFullYear()+543}`
+}
+function toISO(d) { return new Date(d).toISOString() }
+
+// ===== API =====
+async function load(dateStr = null) {
   loading.value = true
   fetchError.value = ''
-  try{
-    const { data } = await api.get('/api/leaves/pending')
-    requests.value = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
-    // optional user profile
-    try { const u = await api.get('/api/me'); me.value = u.data || me.value } catch(_) {}
-  } catch(e){
+  try {
+    // backend: /api/notetakers/leaves/pending
+    const params = dateStr ? { date: dateStr } : {}
+    const { data } = await api.get('/api/notetakers/leaves/pending', { params })
+    requests.value = Array.isArray(data?.items) ? data.items : []
+    try { const u = await api.get('/api/me'); me.value = u.data || me.value } catch (_) {}
+  } catch (e) {
     console.error('load pending', e)
     fetchError.value = e?.response?.data?.error || e.message || 'load failed'
-  } finally { loading.value=false }
-}
-
-async function loadTakers(){
-  try{
-    const { data } = await api.get('/api/note-takers')
-    takers.value = Array.isArray(data) ? data : Array.isArray(data?.items)?data.items:[]
-  } catch(e){ console.error('load takers', e) }
-}
-
-function openAssign(r){
-  currentReq.value = r
-  selectedTaker.value = ''
-  showAssign.value = true
-  loadTakers()
-}
-
-function closeAssign(){ showAssign.value = false; currentReq.value = null }
-
-async function assign(){
-  if(!currentReq.value || !selectedTaker.value) return
-  assigning.value = true
-  try{
-    await api.post('/api/substitute', {
-      meetingId: currentReq.value.meeting?.id,
-      oldTakerId: currentReq.value.user?.id,
-      newTakerId: selectedTaker.value
-    })
-    await load()
-    closeAssign()
-  } catch(e){
-    console.error('assign failed', e)
-    fetchError.value = e?.response?.data?.error || e.message || 'assign failed'
-    alert('ส่งไม่สำเร็จ')
-  } finally { assigning.value = false }
-}
-
-async function logout(){
-  try { await api.post('/api/logout') } catch(_) {}
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('user_role')
-  router.push('/login')
-}
-
-onMounted(load)
-
-/**
- * fetch candidates for a booking time range
- * excludeIds: array of user ids to exclude
- */
-async function loadCandidates(startIso, endIso, excludeIds = []) {
-  candidateError.value = ''
-  candidates.value = []
-  loading.value = true
-  try {
-    const params = { start: startIso, end: endIso }
-    if (excludeIds && excludeIds.length) params.excludeIds = excludeIds.join(',')
-    const res = await api.get('/api/notetakers/candidates', { params })
-    candidates.value = res.data?.items ?? res.data ?? []
-  } catch (e) {
-    console.error('loadCandidates', e)
-    candidateError.value = e?.response?.data?.error || e?.message || 'โหลดผู้แทนไม่ได้'
   } finally {
     loading.value = false
   }
 }
 
-/** choose substitute (admin/note manager only) */
-async function submitSubstitute(bookingId, forUserId, substituteUserId) {
+async function loadCandidates(startIso, endIso, excludeIds = []) {
+  candidateError.value = ''
+  candidates.value = []
   try {
-    const res = await api.post('/api/notetakers/substitute', { bookingId, forUserId, substituteUserId })
-    if (res?.data?.ok) return true
-    return false
+    const params = { start: startIso, end: endIso }
+    if (excludeIds?.length) params.excludeIds = excludeIds.join(',')
+    const res = await api.get('/api/notetakers/candidates', { params })
+    candidates.value = res.data?.items ?? res.data ?? []
   } catch (e) {
-    console.error('submitSubstitute', e)
-    alert(e?.response?.data?.error || 'เลือกแทนไม่สำเร็จ')
-    return false
+    console.error('loadCandidates', e)
+    candidateError.value = e?.response?.data?.error || e?.message || 'โหลดผู้แทนไม่ได้'
   }
 }
 
-async function openNew(){ Swal.fire({ title:'ขอแทน/ลา', html:`<input id="d" class="swal2-input" placeholder="รายละเอียด">`, preConfirm: () => ({ note: document.getElementById('d').value }) }).then(async (r)=>{ if(!r.isConfirmed) return; try{ await api.post('/api/note-taker/substitutes', r.value); Swal.fire({icon:'success'}); load() }catch{ Swal.fire({icon:'error'}) } }) }
+function openAssign(req) {
+  currentReq.value = req
+  selectedTaker.value = ''
+  showAssign.value = true
+  const startIso = toISO(req.startTime)
+  const endIso   = toISO(req.endTime)
+  const exclude  = (req.unavailableUsers || []).map(u => Number(u.id)).filter(Boolean)
+  loadCandidates(startIso, endIso, exclude)
+}
+
+function closeAssign() {
+  showAssign.value = false
+  currentReq.value = null
+  candidates.value = []
+  selectedTaker.value = ''
+}
+
+async function assign() {
+  if (!currentReq.value || !selectedTaker.value) return
+  assigning.value = true
+  try {
+    const forUserId = Number(currentReq.value.unavailableUsers?.[0]?.id)
+    await api.post('/api/notetakers/substitute', {
+      bookingId: Number(currentReq.value.id),
+      forUserId,
+      substituteUserId: Number(selectedTaker.value),
+    })
+    Swal.fire({ icon: 'success', title: 'เปลี่ยนผู้จดแล้ว' })
+    await load()
+    closeAssign()
+  } catch (e) {
+    console.error('assign failed', e)
+    fetchError.value = e?.response?.data?.error || e.message || 'assign failed'
+    Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ' })
+  } finally {
+    assigning.value = false
+  }
+}
+
+async function logout() {
+  try { await api.post('/api/logout') } catch (_) {}
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('user_role')
+  router.push('/login')
+}
 
 onMounted(() => {
-  // ตัวอย่างเรียกเริ่มต้น (หากจำเป็น)
-  // loadCandidates('2025-10-25T08:00:00Z','2025-10-25T17:00:00Z')
+  load() // วันนี้
 })
 </script>
+
+
 
 <style scoped>
 .nav-link { @apply block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-100; }

@@ -506,4 +506,91 @@ router.post("/substitute", auth, requireNoteManagerOrAdmin, async (req, res) => 
   }
 });
 
+// --- Leaves (ลาล่วงหน้า) ---
+/* ========== Leaves & Requests (ท้ายไฟล์) ========== */
+
+// ---------------- Types ----------------
+type LeaveItem = {
+  id: number;
+  from?: string;
+  to?: string;
+  reason?: string;
+  status?: "PENDING" | "APPROVED" | "REJECTED";
+};
+
+type RequestItem = {
+  id: number;
+  start?: string;
+  end?: string;
+  targetUserId?: number;
+  bookingId?: number;
+};
+
+// ---------------- Handlers ----------------
+async function handleLeavesGet(req: any, res: any) {
+  try {
+    const page = Number(req.query.page || 1);
+    const pageSize = Math.min(Number(req.query.pageSize || 200), 200);
+    // TODO: ดึงจาก DB จริง (รองรับ createdBy=me)
+    const items: LeaveItem[] = [];
+    return res.json({ items, pagination: { page, pageSize, total: items.length } });
+  } catch (e: any) {
+    console.error("GET /leaves failed:", e);
+    return res.status(500).json({ error: "Internal Server Error", message: e?.message });
+  }
+}
+
+async function handleLeavesPost(req: any, res: any) {
+  try {
+    // ✅ หน้าเว็บส่ง { from, to, reason }
+    const { from, to, reason } = req.body as { from?: string; to?: string; reason?: string };
+    // TODO: บันทึกลง DB จริง
+    const created: LeaveItem = { id: Date.now(), from, to, reason, status: "PENDING" };
+    return res.json({ ok: true, item: created });
+  } catch (e: any) {
+    console.error("POST /leaves failed:", e);
+    return res.status(500).json({ error: "Internal Server Error", message: e?.message });
+  }
+}
+
+async function handleRequestsGet(_req: any, res: any) {
+  try {
+    // TODO: ดึงจาก DB จริง
+    const items: RequestItem[] = [];
+    return res.json({ items, total: items.length });
+  } catch (e: any) {
+    console.error("GET /requests failed:", e);
+    return res.status(500).json({ error: "Internal Server Error", message: e?.message });
+  }
+}
+
+async function handleRequestsPost(req: any, res: any) {
+  try {
+    // ✅ หน้าเว็บส่ง { start, end } (+ตัวเลือก targetUserId, bookingId)
+    const { start, end, targetUserId, bookingId } = req.body as RequestItem;
+    // TODO: บันทึกลง DB จริง
+    const created: RequestItem = { id: Date.now(), start, end, targetUserId, bookingId };
+    return res.json({ ok: true, item: created });
+  } catch (e: any) {
+    console.error("POST /requests failed:", e);
+    return res.status(500).json({ error: "Internal Server Error", message: e?.message });
+  }
+}
+
+// ---------------- New paths (ตาม mount /api/notetakers) ----------------
+//
+//  => /api/notetakers/leaves
+router.get("/leaves", auth, handleLeavesGet);
+router.post("/leaves", auth, handleLeavesPost);
+//
+//  => /api/notetakers/requests
+router.get("/requests", auth, handleRequestsGet);
+router.post("/requests", auth, handleRequestsPost);
+
+// ---------------- Legacy alias (กัน 404 ถ้าฝั่งหน้าเรียกแบบเก่า) ----------------
+//
+//  => /api/notetakers/note-taker/requests  (เผื่อโค้ดเก่ายังเรียกอยู่)
+router.get("/note-taker/requests", auth, handleRequestsGet);
+router.post("/note-taker/requests", auth, handleRequestsPost);
+
 export default router;
