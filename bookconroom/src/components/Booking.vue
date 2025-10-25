@@ -894,11 +894,37 @@ async function fetchRooms () {
   }
 }
 
+// list of position names to exclude from selection
+const excludedPositionNames = new Set([
+  'Housekeeping Manager','Barista','Cleaning Staff','Logistics Staff',
+  'NoteTaking Manager','NoteTaker','Backup NoteTaker',
+  'Operations Manager','Operations Staff',
+  'Sales Manager','Sales Executive','Sales Coordinator',
+  'HR Manager','HR Officer','HR Development Specialist','Finance Manager',
+  'Accountant','Financial Analyst'
+])
+
 async function fetchPositions () { 
   try { 
     const { data } = await api.get('/api/positions', { params: { excludeAdmin: 1, sort: 'asc' } })
-    positions.value = Array.isArray(data) ? data : []
-  } catch { 
+    const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
+
+    // filter out excluded positions by name
+    positions.value = items
+      .filter(p => !excludedPositionNames.has((p.name || '').trim()))
+      .map(p => ({
+        ...p,
+        // keep name normalized (optional)
+        name: p.name || p.title || `ตำแหน่ง ${p.id}`
+      }))
+
+    // if some already-selected positionIds refer to excluded positions, remove them
+    if (Array.isArray(form.value.requiredPositionIds) && form.value.requiredPositionIds.length) {
+      const allowedIds = new Set(positions.value.map(p => p.id))
+      form.value.requiredPositionIds = form.value.requiredPositionIds.filter(id => allowedIds.has(id))
+    }
+  } catch (err) { 
+    console.error('fetchPositions', err)
     positions.value = [] 
   }
 }

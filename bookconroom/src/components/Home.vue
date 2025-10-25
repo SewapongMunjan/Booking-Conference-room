@@ -389,7 +389,9 @@
               <div class="modern-card shadow-md">
                 <div class="flex items-center justify-between mb-4">
                   <h4 class="font-semibold text-gray-900 text-base">การประชุมกำลังจะมาถึง</h4>
-                  <div class="text-sm text-gray-500">ภายใน 24 ชั่วโมง</div>
+                  <div class="flex items-center gap-2">
+                    <div class="text-sm text-gray-500">ภายใน 7 วันข้างหน้า</div>
+                  </div>
                 </div>
 
                 <div v-if="loadingUpcoming" class="py-6 text-center text-gray-500">กำลังโหลด...</div>
@@ -424,6 +426,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
+import Swal from 'sweetalert2'  // ถ้าไม่ใช้ sweetalert ให้ลบบรรทัดนี้
 
 const router = useRouter()
 const showMobileMenu = ref(false)
@@ -590,12 +593,38 @@ onMounted(async () => {
   await fetchNotifications()
   notiTimer = setInterval(() => fetchNotifications(), 30000)
   document.addEventListener('click', handleClickOutside)
+
+  // <-- เพิ่มการโหลดรายการประชุมที่จะแสดง
+  try {
+    // โหลดทั้ง chart/summary และรายการ coming-soon / upcoming
+    await Promise.all([
+      loadRecentAndChart(),
+      fetchComingSoon(),
+      fetchUpcoming()
+    ])
+  } catch (e) {
+    console.warn('[Home] initial bookings load failed', e)
+  }
+
+  // รีเฟรชเมื่อมีการเปลี่ยน bookings จากส่วนอื่นของแอป
+  window.addEventListener('bookings:changed', () => {
+    loadRecentAndChart()
+    fetchComingSoon()
+    fetchUpcoming()
+  })
 })
 
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
   if (notiTimer) clearInterval(notiTimer)
   document.removeEventListener('click', handleClickOutside)
+
+  // remove listener ที่เพิ่มข้างต้น
+  window.removeEventListener('bookings:changed', () => {
+    loadRecentAndChart()
+    fetchComingSoon()
+    fetchUpcoming()
+  })
 })
 
 async function loadKpi() {
@@ -745,7 +774,6 @@ async function fetchUpcoming() {
     const start = toISODate(now)
     const endDate = new Date(now); endDate.setDate(now.getDate() + 7)
     const end = toISODate(endDate)
-    // try candidate endpoints, fallback to bookings list with date range
     const candidates = [
       ['/api/bookings', { params: { from: start, to: end, page: 1, pageSize: 200 } }],
       ['/api/bookings/upcoming', { params: { days: 7 } }],
@@ -753,26 +781,30 @@ async function fetchUpcoming() {
     ]
     let res = null
     for (const [url, opt] of candidates) {
-      try {
-        res = await api.get(url, opt)
-        if (res?.status === 200) break
-      } catch (e) { res = null }
+      try { res = await api.get(url, opt); if (res?.status === 200) break } catch (e) { res = null }
     }
-    if (!res) {
-      upcoming.value = []
-      return
-    }
+    if (!res) { upcoming.value = []; return }
+
     const data = res.data?.items ?? res.data ?? []
-    // normalize: ensure start/end and requester/room available
-    upcoming.value = (Array.isArray(data) ? data : []).map(it => ({
-      id: it.id,
-      title: it.title || it.room?.name || it.roomName,
-      room: it.room || { roomName: it.roomName },
-      requester: it.requester || it.user || it.owner || {},
-      status: it.status,
-      start: it.startAt ?? it.startTime ?? it.start,
-      end: it.endAt ?? it.endTime ?? it.end
-    })).filter(i => i.start) // keep only with start
+    const raw = (Array.isArray(data) ? data : [])
+      .map(it => ({
+        id: it.id,
+        title: it.title || it.room?.name || it.roomName,
+        room: it.room || { roomName: it.roomName },
+        requester: it.requester || it.user || it.owner || {},
+        status: it.status,
+        start: it.startAt ?? it.startTime ?? it.start,
+        end: it.endAt ?? it.endTime ?? it.end
+      }))
+      // only keep events that haven't fully finished (end > now)
+      .filter(i => {
+        if (!i.start) return false
+        const s = new Date(i.start)
+        const e = i.end ? new Date(i.end) : new Date(s.getTime() + 1)
+        return !Number.isNaN(e.getTime()) && e.getTime() > now.getTime()
+      })
+
+    upcoming.value = raw
   } catch (e) {
     console.error('fetchUpcoming', e)
     upcoming.value = []
@@ -781,62 +813,42 @@ async function fetchUpcoming() {
   }
 }
 
-// call fetchUpcoming on mount with other inits
-onMounted(async () => {
-  updateDateTime()
-  clockTimer = setInterval(updateDateTime, 1000)
-  await fetchMe()
-  await fetchNotifications()
-  await fetchUpcoming()        // <-- fetch upcoming here
-  notiTimer = setInterval(() => fetchNotifications(), 30000)
-  document.addEventListener('click', handleClickOutside)
-})
-
-// also refresh upcoming when KPIs load
-onMounted(() => {
-  loadKpi()
-  window.addEventListener('bookings:changed', () => {
-    loadKpi()
-    fetchUpcoming()
-  })
-})
-
-// ใหม่: ฟังก์ชันสำหรับดึงการประชุมที่จะเกิดขึ้นภายใน 24 ชั่วโมง
 async function fetchComingSoon() {
   loadingUpcoming.value = true
   try {
     const now = new Date()
     const start = toISODate(now)
-    const endDate = new Date(now); endDate.setHours(now.getHours() + 24)
-    const end = toISODate(endDate)
-    // try candidate endpoints, fallback to bookings list with date range
+    const endWindow = new Date(now); endWindow.setDate(now.getDate() + 7) // <-- 7 วันข้างหน้า
+    const end = toISODate(endWindow)
     const candidates = [
       ['/api/bookings', { params: { from: start, to: end, page: 1, pageSize: 200 } }],
-      ['/api/bookings/coming-soon', { params: { hours: 24 } }],
+      ['/api/bookings/coming-soon', { params: { days: 7 } }],
       ['/api/bookings', { params: { dateFrom: start, dateTo: end, page: 1, pageSize: 200 } }]
     ]
     let res = null
     for (const [url, opt] of candidates) {
-      try {
-        res = await api.get(url, opt)
-        if (res?.status === 200) break
-      } catch (e) { res = null }
+      try { res = await api.get(url, opt); if (res?.status === 200) break } catch (e) { res = null }
     }
-    if (!res) {
-      comingSoon.value = []
-      return
-    }
+    if (!res) { comingSoon.value = []; return }
+
     const data = res.data?.items ?? res.data ?? []
-    // normalize: ensure start/end and requester/room available
-    comingSoon.value = (Array.isArray(data) ? data : []).map(it => ({
-      id: it.id,
-      title: it.title || it.room?.name || it.roomName,
-      room: it.room || { roomName: it.roomName },
-      requester: it.requester || it.user || it.owner || {},
-      status: it.status,
-      start: it.startAt ?? it.startTime ?? it.start,
-      end: it.endAt ?? it.endTime ?? it.end
-    })).filter(i => i.start) // keep only with start
+    comingSoon.value = (Array.isArray(data) ? data : [])
+      .map(it => ({
+        id: it.id,
+        title: it.title || it.room?.name || it.roomName,
+        room: it.room || { roomName: it.roomName },
+        requester: it.requester || it.user || it.owner || {},
+        status: it.status,
+        start: it.startAt ?? it.startTime ?? it.start,
+        end: it.endAt ?? it.endTime ?? it.end
+      }))
+      // keep only events that haven't finished AND start <= now+7days
+      .filter(i => {
+        if (!i.start) return false
+        const s = new Date(i.start)
+        const e = i.end ? new Date(i.end) : new Date(s.getTime() + 1)
+        return !Number.isNaN(e.getTime()) && e.getTime() > now.getTime() && s.getTime() <= endWindow.getTime()
+      })
   } catch (e) {
     console.error('fetchComingSoon', e)
     comingSoon.value = []
@@ -844,100 +856,6 @@ async function fetchComingSoon() {
     loadingUpcoming.value = false
   }
 }
-
-// เรียกใช้ฟังก์ชัน fetchComingSoon เมื่อ component ถูก mount
-onMounted(async () => {
-  updateDateTime()
-  clockTimer = setInterval(updateDateTime, 1000)
-  await fetchMe()
-  await fetchNotifications()
-  await fetchUpcoming()
-  await fetchComingSoon()        // <-- fetch coming soon here
-  notiTimer = setInterval(() => fetchNotifications(), 30000)
-  document.addEventListener('click', handleClickOutside)
-})
-
-// อัปเดต KPI และการประชุมที่กำลังจะมาถึงเมื่อมีการเปลี่ยนแปลงการจอง
-onMounted(() => {
-  loadKpi()
-  window.addEventListener('bookings:changed', () => {
-    loadKpi()
-    fetchUpcoming()
-    fetchComingSoon() // <-- refresh coming soon
-  })
-})
-
-// NEW: usage 7 days (ensure these names not colliding with existing vars)
-const usage7Days = ref([0,0,0,0,0,0,0])
-const labels7Days = ref([])
-const labels7DaysShort = ref([])
-const usageMax = computed(() => Math.max(...usage7Days.value, 1))
-
-function build7DayLabels(){
-  const now = new Date()
-  const daysFull = []
-  const daysShort = []
-  for (let i = 6; i >= 0; i--){
-    const d = new Date(now)
-    d.setDate(now.getDate() - i)
-    const dayNum = d.getDate()
-    const weekShort = ['อา','จ','อ','พ','พฤ','ศ','ส'][d.getDay()]
-    const monthShort = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][d.getMonth()]
-    daysFull.push(`${weekShort} ${dayNum} ${monthShort}`)
-    daysShort.push(weekShort)
-  }
-  labels7Days.value = daysFull
-  labels7DaysShort.value = daysShort
-}
-
-function barHeight(val){
-  const max = usageMax.value || 1
-  const pct = Math.round((val / max) * 100)
-  return `${Math.max(6, pct)}%`
-}
-
-async function fetchUsage7Days(){
-  try {
-    const now = new Date()
-    const start = new Date(now); start.setDate(now.getDate() - 6)
-    const end = new Date(now)
-    const startISO = toISODate(start)
-    const endISO = toISODate(end)
-    // request bookings for last 7 days (backend may accept from/to params)
-    const res = await api.get('/api/bookings', { params: { from: startISO, to: endISO, page:1, pageSize:1000 } })
-    const data = res?.data?.items ?? res?.data ?? []
-    const counts = Array(7).fill(0)
-    const bookings = Array.isArray(data) ? data : []
-    for (const b of bookings){
-      const s = b.startAt ?? b.startTime ?? b.start ?? b.from
-      if (!s) continue
-      const sd = new Date(s)
-      if (Number.isNaN(sd.getTime())) continue
-      const dayStart = new Date(start.getFullYear(), start.getMonth(), start.getDate())
-      const diff = Math.floor((new Date(sd.getFullYear(), sd.getMonth(), sd.getDate()) - dayStart) / (24*3600*1000))
-      if (diff >=0 && diff < 7){
-        counts[diff] += 1
-      }
-    }
-    usage7Days.value = counts
-    build7DayLabels()
-  } catch (e) {
-    console.error('fetchUsage7Days', e)
-    usage7Days.value = [0,0,0,0,0,0,0]
-    build7DayLabels()
-  }
-}
-
-// ensure we call this at mount and when bookings change
-onMounted(() => {
-  fetchUsage7Days()
-  window.addEventListener('bookings:changed', fetchUsage7Days)
-})
-
-// cleanup
-onUnmounted(() => {
-  window.removeEventListener('bookings:changed', fetchUsage7Days)
-})
 </script>
 
 <style scoped>
