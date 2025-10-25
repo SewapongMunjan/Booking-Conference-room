@@ -558,6 +558,14 @@
               </div>
             </section>
           </template>
+
+          <!-- ตัวอย่างตำแหน่งแทรกปุ่ม action -->
+          <div class="actions mt-4 flex items-center justify-end gap-2">
+            <!-- ...existing cancel button / other actions... -->
+ 
+           <!-- เพิ่มปุ่มดาวน์โหลด PDF ใกล้ปุ่มยกเลิก -->
+            <BookingPdfButton :bookingId="booking?.id || Number(route.params.id)" class="ml-2" />
+          </div>
         </div>
       </main>
     </div>
@@ -570,6 +578,7 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '@/lib/api.js'
 import Swal from 'sweetalert2'
 import { useAuth } from '@/composables/useAuth'
+import BookingPdfButton from '@/components/BookingPdfButton.vue'
 
 const route = useRoute()
 const router = useRouter()

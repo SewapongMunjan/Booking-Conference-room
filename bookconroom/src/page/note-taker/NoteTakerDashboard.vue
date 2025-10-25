@@ -1,44 +1,119 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <header class="bg-white border-b">
-      <div class="max-w-7xl mx-auto px-4 lg:px-8 py-4 flex items-center gap-3">
-        <h1 class="text-xl font-semibold">หน้าหลัก</h1>
-        <div class="ml-auto relative">
-          <input v-model="q" placeholder="ค้นหาห้อง / ผู้จอง..." class="w-72 pl-3 pr-10 py-2 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-          <span class="absolute right-3 top-2.5 text-gray-400">⌕</span>
+    <!-- Left sidebar (same as MyQueue) -->
+    <aside class="hidden lg:block fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-200 z-50">
+      <div class="h-full flex flex-col">
+        <div class="p-4 border-b border-gray-200">
+          <div class="flex items-center gap-2">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-xl shadow-md">📝</div>
+            <div>
+              <h3 class="font-semibold text-gray-900 text-sm">ระบบจดประชุม</h3>
+              <p class="text-[10px] text-gray-500">NoteTaker Console</p>
+            </div>
+          </div>
+        </div>
+
+        <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
+          <router-link to="/note-taker/dashboard" class="nav-link nav-active">🏠 หน้าหลัก</router-link>
+          <router-link to="/note-taker/my-queue" class="nav-link">📋 คิวของฉัน</router-link>
+          <router-link to="/note-taker/leave-request" class="nav-link">🗓️ ลาล่วงหน้า</router-link>
+          <router-link to="/note-taker/substitute" class="nav-link">🔁 จัดการแทนที่</router-link>
+        </nav>
+
+        <div class="p-3 border-t border-gray-200">
+          <div class="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
+            <img :src="me?.avatarUrl || defaultAvatar" class="w-9 h-9 rounded-lg" />
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-xs text-gray-900 truncate">{{ me?.name || 'ผู้ใช้' }}</div>
+              <div class="text-[10px] text-gray-500 truncate">{{ me?.email || '' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Header (same as MyQueue) -->
+    <header class="fixed top-0 right-0 left-0 lg:left-64 z-40 bg-white border-b border-gray-200">
+      <div class="w-full px-8 py-4 flex items-center max-w-7xl mx-auto gap-4">
+        <h1 class="text-lg font-semibold m-0">แดชบอร์ด NoteTaker</h1>
+
+        <div class="ml-auto flex items-center gap-3">
+          <div class="relative hidden sm:block">
+            <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">⌕</span>
+            <input v-model="q" placeholder="ค้นหา ห้อง / ผู้จอง / ผู้จด..." class="w-64 pl-10 pr-3 py-2 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+
+          <button class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="load">รีเฟรช</button>
+
+          <button @click="logout" class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm border border-gray-200 hover:bg-gray-50">
+            <svg class="w-5 h-5 text-red-600 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1"/></svg>
+            <span class="hidden md:inline text-red-600">ออกจากระบบ</span>
+          </button>
         </div>
       </div>
     </header>
 
-    <div class="max-w-7xl mx-auto px-4 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)] gap-6">
-      <NoteTakerNav />
+    <!-- Main -->
+    <div class="lg:ml-64 pt-20">
+      <main class="w-full min-h-[calc(100vh-5rem)] px-8 py-6">
+        <div class="max-w-7xl mx-auto space-y-6">
+          <div class="flex items-center gap-4 mb-6">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-3xl shadow-lg">📝</div>
+            <div>
+              <h2 class="text-2xl font-bold text-gray-900 m-0">แดชบอร์ด NoteTaker</h2>
+              <p class="text-base text-gray-500 m-0 mt-1">ภาพรวมคิวงานและคำขอ</p>
+            </div>
+          </div>
 
-      <main>
-        <div v-if="loading" class="flex justify-center py-12 text-gray-500">กำลังโหลดรายการ...</div>
-        <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <article v-for="m in filtered" :key="m.id" class="bg-white border rounded-2xl p-5 flex flex-col">
-            <div class="flex items-start justify-between">
-              <div class="font-semibold">{{ m.room?.roomName || m.title || 'ห้องประชุม' }}</div>
-              <span class="px-2 py-0.5 text-xs rounded-full" :class="badge(m.status)">{{ statusTH(m.status) }}</span>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="modern-card">
+              <div class="text-xs text-gray-500">คำขอวันนี้</div>
+              <div class="text-2xl font-bold mt-2">{{ requestsCount }}</div>
             </div>
-            <div class="text-sm text-gray-600 mt-2">
-              {{ dateTH(m.startTime) }} · {{ timeRange(m.startTime, m.endTime) }}
+            <div class="modern-card">
+              <div class="text-xs text-gray-500">งานค้าง</div>
+              <div class="text-2xl font-bold mt-2 text-amber-600">{{ pendingCount }}</div>
             </div>
-            <div class="text-sm text-gray-600 mt-1">
-              ผู้จอง: {{ m.requester?.name || '-' }} <span v-if="m.requester?.dept">· {{ m.requester.dept }}</span>
+            <div class="modern-card">
+              <div class="text-xs text-gray-500">งานเสร็จ</div>
+              <div class="text-2xl font-bold mt-2 text-green-600">{{ doneCount }}</div>
             </div>
-            <div class="text-sm text-gray-600 mt-1">
-              คนจดประชุม: <span v-if="(m.noteTakers||[]).length">{{ (m.noteTakers||[]).map(n=>n.name).join(', ') }}</span><span v-else>-</span>
-            </div>
+          </div>
 
-            <div class="mt-4 flex gap-2">
-              <button class="flex-1 px-3 py-2 rounded-lg border text-sm hover:bg-gray-50" @click="view(m)">ดูรายละเอียด</button>
-              <button class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="start(m)" v-if="canStart(m)">เริ่มจดประชุม</button>
-              <button class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700" @click="sendReport(m)" v-if="canReport(m)">ส่งรายงาน</button>
-            </div>
-          </article>
+          <div v-if="fetchError" class="text-red-600 p-4 rounded-lg bg-red-50 border border-red-100">Error: {{ fetchError }}</div>
 
-          <div v-if="!filtered.length" class="text-gray-500 sm:col-span-2 xl:col-span-3 text-sm">ไม่มีรายการ</div>
+          <div v-if="loading" class="flex justify-center py-12 text-gray-500">กำลังโหลดรายการ...</div>
+
+          <section v-else>
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <article v-for="m in filtered" :key="m.id" class="bg-white border rounded-2xl p-5 flex flex-col shadow-sm hover:shadow-md transition">
+                <div class="flex items-start justify-between">
+                  <div class="font-semibold text-lg">{{ m.room?.roomName || m.title || 'ห้องประชุม' }}</div>
+                  <span class="px-2 py-0.5 text-xs rounded-full" :class="badge(m.status)">{{ statusTH(m.status) }}</span>
+                </div>
+
+                <div class="text-sm text-gray-600 mt-2">
+                  {{ dateTH(m.startTime) }} · {{ timeRange(m.startTime, m.endTime) }}
+                </div>
+
+                <div class="text-sm text-gray-600 mt-1">
+                  ผู้จอง: {{ m.requester?.name || '-' }} <span v-if="m.requester?.dept">· {{ m.requester.dept }}</span>
+                </div>
+
+                <div class="text-sm text-gray-600 mt-1">
+                  คนจดประชุม: <span v-if="(m.noteTakers||[]).length">{{ (m.noteTakers||[]).map(n=>n.name).join(', ') }}</span><span v-else>-</span>
+                </div>
+
+                <div class="mt-4 flex gap-2">
+                  <button class="flex-1 px-3 py-2 rounded-lg border text-sm hover:bg-gray-50" @click="view(m)">ดูรายละเอียด</button>
+                  <button v-if="canStart(m)" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="start(m)">เริ่มจดประชุม</button>
+                  <button v-if="canReport(m)" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700" @click="sendReport(m)">ส่งรายงาน</button>
+                </div>
+              </article>
+
+              <div v-if="!filtered.length" class="text-gray-500 sm:col-span-2 xl:col-span-3 text-sm">ไม่มีรายการ</div>
+            </div>
+          </section>
         </div>
       </main>
     </div>
@@ -49,27 +124,46 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
-import NoteTakerNav from './NoteTakerNav.vue'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 
 const router = useRouter()
-const loading = ref(true)
+
+// single logout function
+async function logout() {
+  try { await api.post('/api/logout') } catch { /* ignore */ }
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('me')
+  router.push('/login')
+}
+
 const q = ref('')
+const requestsCount = ref(0)
+const pendingCount = ref(0)
+const doneCount = ref(0)
+
+const loading = ref(true)
 const items = ref([])
+const fetchError = ref('')
+
+const me = ref({ name: '', email: '', avatarUrl: '' })
+const defaultAvatar = 'https://cdn-icons-png.flaticon.com/128/456/456283.png'
 
 const filtered = computed(() => {
-  if (!q.value) return items.value
-  const kw = q.value.toLowerCase()
+  const kw = q.value.trim().toLowerCase()
+  if (!kw) return items.value
   return items.value.filter(m =>
     (m.room?.roomName||'').toLowerCase().includes(kw) ||
-    (m.requester?.name||'').toLowerCase().includes(kw)
+    (m.requester?.name||'').toLowerCase().includes(kw) ||
+    (m.noteTakers||[]).some(n => n.name?.toLowerCase().includes(kw))
   )
 })
 
 function statusTH(s){ if(s==='IN_PROGRESS') return 'กำลังจด'; if(s==='DONE') return 'ส่งรายงานแล้ว'; return 'รอเริ่ม' }
-function badge(s){ if(s==='IN_PROGRESS') return 'bg-green-100 text-green-700'; if(s==='DONE') return 'bg-gray-200 text-gray-700'; return 'bg-amber-100 text-amber-800' }
-function dateTH(iso){ const d=new Date(iso); const m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']; return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}` }
-function timeRange(s,e){ const o={hour:'2-digit',minute:'2-digit'}; return `${new Date(s).toLocaleTimeString([],o)} - ${new Date(e).toLocaleTimeString([],o)}` }
-function canStart(m){ return m.status!=='DONE' }
+function badge(s){ if(s==='IN_PROGRESS') return 'bg-green-100 text-green-700'; if(s==='DONE') return 'bg-blue-100 text-blue-700'; return 'bg-amber-100 text-amber-800' }
+function dateTH(iso){ if(!iso) return '-' ; const d=new Date(iso); const m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']; return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}` }
+function timeRange(s,e){ if(!s||!e) return '-'; const o={hour:'2-digit',minute:'2-digit'}; return `${new Date(s).toLocaleTimeString([],o)} - ${new Date(e).toLocaleTimeString([],o)}` }
+function canStart(m){ return m.status!=='DONE' && m.status!=='IN_PROGRESS' }
 function canReport(m){ return m.status==='IN_PROGRESS' }
 
 function view(m){ router.push(`/booking-info/${m.id}`) }
@@ -77,9 +171,26 @@ function start(m){ router.push({ path: '/note-taker/my-queue', query: { focusId:
 function sendReport(m){ router.push({ path: '/note-taker/my-queue', query: { focusId: m.id, viewReport: 1 } }) }
 
 onMounted(async () => {
+  loading.value = true
+  fetchError.value = ''
   try{
-    const { data } = await api.get('/api/bookings', { params: { sort:'nearest' } })
-    items.value = Array.isArray(data?.items) ? data.items : []
+    const res = await api.get('/api/bookings', { params: { sort:'nearest', page:1, pageSize:200 } })
+    const data = res.data
+    items.value = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
+    // counts (try to derive)
+    requestsCount.value = items.value.filter(i=>i.isRequest).length || 0
+    pendingCount.value = items.value.filter(i=>i.status==='PENDING' || !i.status).length || 0
+    doneCount.value = items.value.filter(i=>i.status==='DONE').length || 0
+    try { const u = await api.get('/api/me'); me.value = u.data || me.value } catch(_) {}
+  } catch(e){
+    console.error('fetch meetings failed', e)
+    fetchError.value = e?.response?.data?.error || e.message || 'fetch failed'
   } finally { loading.value=false }
 })
 </script>
+
+<style scoped>
+.modern-card { @apply bg-white rounded-2xl border border-gray-200 p-6; }
+.nav-link { @apply block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-100; }
+.nav-active { @apply bg-blue-50 text-blue-600; }
+</style>

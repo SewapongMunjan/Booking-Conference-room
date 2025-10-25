@@ -12,6 +12,55 @@ import {
   RefType,
 } from "@prisma/client";
 
+
+function renderBookingHtml(data: any): string {
+  const attendeesHtml =
+    (data.attendees || [])
+      .map(
+        (a: any) =>
+          `<li>${a.name ?? "Unknown"}${a.email ? ` &lt;${a.email}&gt;` : ""}</li>`
+      )
+      .join("") || "<li>No attendees</li>";
+
+  const start = data.dateStart ? new Date(data.dateStart).toLocaleString() : "-";
+  const end = data.dateEnd ? new Date(data.dateEnd).toLocaleString() : "-";
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>${data.code ?? "Booking"}</title>
+        <style>
+          body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; padding: 20px; }
+          h1 { font-size: 18px; margin-bottom: 8px; }
+          .meta { margin-bottom: 12px; }
+        </style>
+      </head>
+      <body>
+        <h1>Booking: ${data.code ?? "-"}</h1>
+        <div class="meta">
+          <div><strong>Room:</strong> ${data.roomName ?? "-"}</div>
+          <div><strong>Organizer:</strong> ${data.organizer ?? "-"}</div>
+          <div><strong>Time:</strong> ${start} - ${end}</div>
+        </div>
+        <div>
+          <strong>Attendees</strong>
+          <ul>${attendeesHtml}</ul>
+        </div>
+        <div>
+          <strong>Agenda</strong>
+          <p>${(data.agenda ?? "").replace(/\n/g, "<br/>")}</p>
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+async function htmlToPdfBuffer(html: string, _opts?: any): Promise<Buffer> {
+  return Buffer.from(html, "utf-8");
+}
+
 const router = Router();
 
 /** ===== Helper: ตรวจชนเวลาห้อง (มี option ข้าม bookingId เดิม เพื่อใช้ตอน approve) */
@@ -711,6 +760,62 @@ router.patch("/:id/cancel", auth, async (req: any, res) => {
   } catch (e) {
     console.error("Cancel booking failed:", e);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+/** GET /api/bookings/:id/pdf — ดาวน์โหลด PDF ของรายการจอง */
+router.get("/:id/pdf", auth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
+
+    // Load booking using relations that exist in the current schema
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: {
+        room: { select: { id: true, roomName: true, capacity: true } },
+        bookedBy: { select: { id: true, fullName: true, email: true } },
+        invites: { include: { user: { select: { id: true, fullName: true, email: true } } } },
+        noteTakers: { include: { user: { select: { id: true, fullName: true } } } },
+      },
+    });
+    if (!booking) return res.status(404).json({ error: "not found" });
+
+    const data = {
+      code: `BK-${booking.id}`,
+      roomName: booking.room?.roomName ?? "-",
+      organizer: booking.bookedBy?.fullName ?? `user#${booking.bookedById}`,
+      department: undefined,
+      dateStart: booking.startTime,
+      dateEnd: booking.endTime,
+      attendees: (booking.invites ?? []).map((a: any) => ({
+        name: a.user?.fullName ?? `user#${a.userId}`,
+        email: a.user?.email ?? undefined,
+      })),
+      equipments: [], // not present in current schema
+      agenda: booking.purpose ?? "",
+      notes: "",
+    };
+
+    const html = renderBookingHtml(data);
+
+    const pdf = await htmlToPdfBuffer(html, {
+      format: "A4",
+      landscape: false,
+      headerHtml: `
+        <div style="font-size:12px;width:100%;padding:0 24px;display:flex;align-items:center;justify-content:space-between;">
+          <div><b>แบบฟอร์มการจองห้องประชุม</b></div>
+          <div>รหัส: ${data.code}</div>
+        </div>
+      `,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="booking-${data.code}.pdf"`);
+    return res.send(pdf);
+  } catch (err) {
+    console.error("GET /api/bookings/:id/pdf error:", err);
+    return res.status(500).json({ error: "internal server error" });
   }
 });
 

@@ -293,7 +293,7 @@
                   <span class="text-base font-medium text-blue-700">ทั้งหมด</span>
                   <div class="w-14 h-14 rounded-xl bg-blue-500 flex items-center justify-center text-2xl shadow-sm">📊</div>
                 </div>
-                <div class="text-5xl font-bold text-blue-700 mb-2">0</div>
+                <div class="text-5xl font-bold text-blue-700 mb-2">{{ kpi.total }}</div>
                 <div class="text-sm text-blue-600">การจองทั้งหมด</div>
               </div>
 
@@ -302,10 +302,12 @@
                   <span class="text-base font-medium text-green-700">อนุมัติแล้ว</span>
                   <div class="w-14 h-14 rounded-xl bg-green-500 flex items-center justify-center text-2xl shadow-sm">✅</div>
                 </div>
-                <div class="text-5xl font-bold text-green-700 mb-2">0</div>
-                <div class="text-sm text-green-600 flex items-center gap-1">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                <div class="text-5xl font-bold text-green-700 mb-2">{{ kpi.approved }}</div>
+                <div class="text-sm text-green-600 flex items-center gap-2">
                   <span>ยืนยันแล้ว</span>
+                  <span v-if="deltas.approved !== 0" class="text-xs px-2 py-0.5 rounded-full" :class="deltas.approved > 0 ? 'bg-green-100 text-green-700' : 'bg-rose-100 text-rose-700'">
+                    {{ deltas.approved > 0 ? '+'+deltas.approved : deltas.approved }}
+                  </span>
                 </div>
               </div>
 
@@ -314,8 +316,12 @@
                   <span class="text-base font-medium text-amber-700">รออนุมัติ</span>
                   <div class="w-14 h-14 rounded-xl bg-amber-500 flex items-center justify-center text-2xl shadow-sm">⏳</div>
                 </div>
-                <div class="text-5xl font-bold text-amber-700 mb-2">0</div>
-                <div class="text-sm text-amber-600">รอดำเนินการ</div>
+                <div class="text-5xl font-bold text-amber-700 mb-2">{{ kpi.pending }}</div>
+                <div class="text-sm text-amber-600">รอดำเนินการ
+                  <span v-if="deltas.pending !== 0" class="text-xs px-2 py-0.5 rounded-full ml-2" :class="deltas.pending > 0 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-700'">
+                    {{ deltas.pending > 0 ? '+'+deltas.pending : deltas.pending }}
+                  </span>
+                </div>
               </div>
 
               <div class="stat-card bg-gradient-to-br from-red-50 to-red-100 border-red-200 shadow-md hover:shadow-lg transition-shadow">
@@ -323,7 +329,7 @@
                   <span class="text-base font-medium text-red-700">ยกเลิก</span>
                   <div class="w-14 h-14 rounded-xl bg-red-500 flex items-center justify-center text-2xl shadow-sm">❌</div>
                 </div>
-                <div class="text-5xl font-bold text-red-700 mb-2">0</div>
+                <div class="text-5xl font-bold text-red-700 mb-2">{{ kpi.cancelled ?? 0 }}</div>
                 <div class="text-sm text-red-600">ถูกยกเลิก</div>
               </div>
             </div>
@@ -434,7 +440,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'   // { ADDED }
 import api from '@/lib/api.js'
 
 const router = useRouter()
@@ -497,6 +503,15 @@ const notifs = ref([])
 const unreadCount = ref(0)
 const loadingNoti = ref(false)
 const errorNoti = ref('')
+
+
+/** KPIs */
+const kpi = ref({ total: 0, approved: 0, pending: 0, cancelled: 0 })
+const deltas = ref({ approved: 0, pending: 0 })
+
+// --- เพิ่มบรรทัดนี้เพื่อแก้ ReferenceError ---
+const debugKpiRaw = ref(null)
+const debugError = ref('')
 
 async function fetchMe () {
   try {
@@ -599,6 +614,68 @@ onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
   if (notiTimer) clearInterval(notiTimer)
   document.removeEventListener('click', handleClickOutside)
+})
+
+async function loadKpi() {
+  debugError.value = ''
+  const date = new Date().toISOString().slice(0,10)
+  const candidates = [
+    ['/api/stats/bookings', { params: { date } }],
+    ['/api/stats', { params: { date } }],
+    ['/api/bookings/stats', { params: { date } }],
+    ['/api/bookings/summary', { params: { date } }],
+    // fallback: get bookings list and compute counts client-side
+    ['/api/bookings', { params: { date, page: 1, pageSize: 200 } }]
+  ]
+
+  let res = null
+  for (const [url, opt] of candidates) {
+    try {
+      res = await api.get(url, opt)
+      if (res?.status === 200) {
+        debugKpiRaw.value = { url, data: res.data }
+        break
+      }
+    } catch (err) {
+      // ไม่ต้องโยน error ให้ user — แค่ log เพื่อช่วยดีบัก
+      console.warn('[Home] KPI try failed', url, err?.response?.status || err.message)
+    }
+  }
+
+  if (!res) {
+    debugError.value = 'ไม่พบ endpoint สำหรับสถิติ (404)'
+    console.error('[Home] loadKpi no endpoint worked')
+    return
+  }
+
+  const d = res.data ?? {}
+
+  // ถ้า endpoint คืนสรุปตรงๆ ให้แมปโดยตรง
+  kpi.value.total = d.totalToday ?? d.total ?? d.count ?? d.all ?? 0
+  kpi.value.approved = d.approved ?? d.approvedCount ?? d.confirmed ?? 0
+  kpi.value.pending = d.pending ?? d.pendingCount ?? d.waiting ?? 0
+  kpi.value.cancelled = d.cancelled ?? d.cancelledCount ?? d.cancelled ?? 0
+
+  // ถ้ได้รายการ bookings มา (fallback) ก็คำนวณบน client
+  if (!kpi.value.total && Array.isArray(d.items || d)) {
+    const items = Array.isArray(d.items) ? d.items : Array.isArray(d) ? d : []
+    kpi.value.total = items.length
+    kpi.value.approved = items.filter(x => x.status === 'APPROVED' || x.status === 'CONFIRMED').length
+    kpi.value.pending = items.filter(x => x.status === 'PENDING' || x.status === 'REQUESTED').length
+    kpi.value.cancelled = items.filter(x => x.status === 'CANCELLED').length
+  }
+
+  deltas.value.approved = d.deltaApproved ?? d.approvedDelta ?? 0
+  deltas.value.pending = d.deltaPending ?? d.pendingDelta ?? 0
+}
+
+// lifecycle (merge with yours)
+onMounted(() => {
+  loadKpi()
+  window.addEventListener('bookings:changed', loadKpi)
+})
+onUnmounted(() => {
+  window.removeEventListener('bookings:changed', loadKpi)
 })
 </script>
 

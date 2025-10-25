@@ -1,6 +1,6 @@
 // src/middleware/auth.ts
-import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { Request, Response, NextFunction } from "express";
 
 /** ชุดสิทธิ์ที่แนบอยู่ใน JWT (payload.pos) */
 export interface RoleFlags {
@@ -14,7 +14,7 @@ export interface RoleFlags {
 /** ผู้ใช้ที่แนบเข้า req.user */
 export interface AuthUser {
   sub: number;       // userId
-  pos?: RoleFlags;   // สิทธิ์จากตำแหน่ง (Position)
+  pos?: string | RoleFlags;   // สิทธิ์จากตำแหน่ง (Position)
 }
 
 // เพิ่ม type ให้กับ Express.Request
@@ -33,41 +33,52 @@ declare global {
  * - แนบ pos (RoleFlags) เข้า req.user
  */
 export function auth(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization || "";
+  const header = String(req.headers.authorization || "");
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-
-  if (!token) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
 
   try {
     const secret = process.env.JWT_SECRET || "devsecret";
     const decoded = jwt.verify(token, secret) as any;
 
     const subRaw = decoded?.sub;
-    const subNum =
-      typeof subRaw === "number"
-        ? subRaw
-        : typeof subRaw === "string"
-        ? Number.parseInt(subRaw, 10)
-        : NaN;
+    const sub = typeof subRaw === "number" ? subRaw : Number(subRaw);
+    if (!Number.isFinite(sub)) return res.status(401).json({ error: "Invalid token" });
 
-    if (!Number.isFinite(subNum)) {
-      return res.status(401).json({ error: "Invalid token subject" });
-    }
+    const posRaw = decoded?.pos;
+    // normalize: keep original string or map to RoleFlags
+    let pos: string | RoleFlags | undefined = undefined;
+    if (!posRaw) pos = undefined;
+    else if (typeof posRaw === "string") pos = posRaw;
+    else if (typeof posRaw === "object") pos = posRaw as RoleFlags;
 
-    const pos = decoded?.pos as RoleFlags | undefined;
-    req.user = { sub: subNum, pos };
+    req.user = { sub, pos };
     return next();
-  } catch {
+  } catch (err) {
     return res.status(401).json({ error: "Invalid token" });
   }
 }
 
 /** ========= Helpers ========= */
-function hasAnyRole(pos: RoleFlags | undefined, keys: (keyof RoleFlags)[]) {
+// แก้ signature ให้รับ string | RoleFlags | undefined
+function hasAnyRole(pos: string | RoleFlags | undefined, keys: (keyof RoleFlags)[]) {
   if (!pos) return false;
-  return keys.some((k) => Boolean(pos[k]));
+
+  if (typeof pos === 'string') {
+    const s = pos.toLowerCase();
+    const flags: RoleFlags = {
+      isAdmin: s.includes('admin'),
+      isNoteManager: s.includes('note manager') || s.includes('notemanager'),
+      isNoteTaker: s.includes('note taker') || s.includes('notetaker') || s.includes('backup'),
+      isHousekeeper: s.includes('housekeep') || s.includes('housekeeper'),
+      isHousekeepingLead: s.includes('lead') && s.includes('housekeep'),
+      // add other mappings if needed
+    };
+    return keys.some(k => Boolean(flags[k]));
+  }
+
+  // pos is RoleFlags-like
+  return keys.some(k => Boolean((pos as RoleFlags)[k]));
 }
 
 /** Admin-only */
@@ -84,8 +95,16 @@ export function requireNoteManager(req: Request, res: Response, next: NextFuncti
 
 /** Note Taker (หรือ NoteManager/Admin) */
 export function requireNoteTaker(req: Request, res: Response, next: NextFunction) {
-  if (hasAnyRole(req.user?.pos, ["isAdmin", "isNoteManager", "isNoteTaker"])) return next();
-  return res.status(403).json({ error: "Forbidden" });
+  if (hasAnyRole(req.user?.pos, ["isNoteTaker"])) return next();
+
+  // extra safety: also accept exact string matches if payload uses exact text
+  const posRaw = req.user?.pos;
+  if (typeof posRaw === 'string') {
+    const normalized = posRaw.trim().toLowerCase();
+    if (normalized === 'notetaker' || normalized === 'backup notetaker') return next();
+  }
+
+  return res.status(403).json({ error: "Notetaker only" });
 }
 
 /** แม่บ้านทั่วไป (หรือหัวหน้าแม่บ้าน/แอดมิน) */
