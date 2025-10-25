@@ -91,7 +91,7 @@
                       <td class="px-4 py-3">
                         <div class="flex justify-end gap-2">
                           <button class="px-3 py-1.5 rounded-lg border" @click="view(m)">รายละเอียด</button>
-                          <button v-if="m.status!=='DONE'" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white" @click="openForm(m)">เปิดแบบฟอร์ม</button>
+                          <!-- <button v-if="m.status!=='DONE'" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white" @click="openForm(m)">เปิดแบบฟอร์ม</button> -->
                           <button v-if="m.status==='IN_PROGRESS'" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white" @click="viewReport(m)">ดูรายงาน</button>
                         </div>
                       </td>
@@ -122,7 +122,7 @@
                   </div>
                   <div class="flex flex-col gap-2">
                     <button @click="instantLeave(i.id)" class="px-3 py-1 bg-red-600 text-white rounded text-sm">ลากะทันหัน</button>
-                    <button @click="openFormById(i.id)" class="px-3 py-1 border rounded text-sm">บันทึก</button>
+                    <!-- <button @click="openFormById(i.id)" class="px-3 py-1 border rounded text-sm">บันทึก</button> -->
                   </div>
                 </li>
                 <li v-if="!myView.ongoing.length" class="text-sm text-gray-500">ไม่มีรายการ</li>
@@ -235,15 +235,15 @@ function timeRange(s,e){ if(!s||!e) return '-'; const o={hour:'2-digit',minute:'
 function view(m){ router.push(`/booking-info/${m.id}`) }
 function viewById(id){ router.push(`/booking-info/${id}`) }
 
-function openForm(m=null){
-  formMeeting.value = m
-  reportText.value = m?.report || ''
-  showForm.value = true
-}
-function openFormById(id){
-  const target = items.value.find(x => x.id === id)
-  if (target) openForm(target)
-}
+// function openForm(m=null){
+//   formMeeting.value = m
+//   reportText.value = m?.report || ''
+//   showForm.value = true
+// }
+// function openFormById(id){
+//   const target = items.value.find(x => x.id === id)
+//   if (target) openForm(target)
+// }
 function closeForm(){ showForm.value = false; formMeeting.value = null; reportText.value = '' }
 function viewReport(m){ router.push({ path: '/note-taker/my-queue', query: { focusId: m.id, viewReport: 1 } }) }
 

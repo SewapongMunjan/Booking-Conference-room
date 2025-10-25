@@ -281,10 +281,13 @@
                     </label>
                     <select v-model.number="form.roomId" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white">
                       <option :value="null" disabled>-- เลือกห้องประชุม --</option>
-                      <option v-for="r in rooms" :key="r.id" :value="r.id">
-                        {{ r.roomName }}<span v-if="r.capacity"> ({{ r.capacity }} ที่นั่ง)</span> - {{ r.status }}
+                      <option v-for="r in rooms" :key="r.id" :value="r.id" :disabled="(r.status || '').toUpperCase() !== 'AVAILABLE'">
+                        {{ r.roomName }}<span v-if="r.capacity"> ({{ r.capacity }} ที่นั่ง)</span> - {{ r.statusLabel || r.status || 'UNKNOWN' }} 
                       </option>
                     </select>
+                    <p v-if="selectedRoom && (selectedRoom.status || '').toUpperCase() !== 'AVAILABLE'" class="text-xs text-red-600 mt-2">
+                      ห้องนี้ไม่สามารถจองได้ (สถานะ: {{ selectedRoom.statusLabel || selectedRoom.status }})
+                    </p>
                   </div>
 
                   <!-- Date & Time -->
@@ -303,7 +306,7 @@
                         />
                         <p class="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
                           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0114 0z"/>
                           </svg>
                           ไม่สามารถเลือกวันที่ย้อนหลังได้
                         </p>
@@ -773,7 +776,11 @@ const startTs  = computed(() => Date.parse(startISO.value || ''))
 const endTs    = computed(() => Date.parse(endISO.value || ''))
 
 const durationOk = computed(() => !!form.value.startLocal && !!form.value.endLocal && endTs.value > startTs.value)
-const canSubmit  = computed(() => !!form.value.roomId && durationOk.value)
+const canSubmit  = computed(() => {
+  const base = !!form.value.roomId && durationOk.value
+  const roomOk = selectedRoom.value ? ((selectedRoom.value.status || '').toUpperCase() === 'AVAILABLE') : false
+  return base && roomOk
+})
 
 /* ---------- Date/Time split models ---------- */
 const wholeDay = ref(false)
@@ -868,9 +875,21 @@ function overlaps (aStart, aEnd, bStart, bEnd) {
 /* ---------- API ---------- */
 async function fetchRooms () { 
   try {
-    const { data } = await api.get('/api/rooms')
-    rooms.value = Array.isArray(data) ? data : []
-  } catch {
+    // ขอ "ทุกห้อง" จาก backend (all=1) และรองรับทั้งรูปแบบ { items: [...] } หรือ [...] 
+    const res = await api.get('/api/rooms', { params: { all: 1 } })
+    const data = res?.data ?? []
+    const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
+    // normalize fields used by template
+    rooms.value = items.map(r => ({
+      id: r.id,
+      roomName: r.roomName || r.name || r.room_name || `ห้อง ${r.id}`,
+      capacity: r.capacity ?? r.seats ?? null,
+      status: (r.status || '').toUpperCase(),
+      // keep raw object for other use
+      raw: r
+    }))
+  } catch (err) {
+    console.error('fetchRooms', err)
     rooms.value = []
   }
 }
@@ -966,6 +985,18 @@ const minTime = computed(() => {
 /* ---------- submit ---------- */
 async function submitBooking () {
   if (!canSubmit.value) {
+    // provide clearer message when room not bookable
+    if (selectedRoom.value && (selectedRoom.value.status || '').toUpperCase() !== 'AVAILABLE') {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'ไม่สามารถจองได้',
+        text: `ห้อง "${selectedRoom.value.roomName}" ไม่สามารถจองได้ในขณะนี้ (สถานะ: ${selectedRoom.value.statusLabel || selectedRoom.value.status}). โปรดเลือกห้องอื่นหรือรอให้สถานะกลับมาเป็น AVAILABLE.`,
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#3b82f6',
+      })
+      return
+    }
+
     await Swal.fire({
       icon: 'warning',
       title: 'ข้อมูลไม่ครบถ้วน',
@@ -1211,6 +1242,14 @@ onUnmounted(() => {
 
 watch(() => [form.value.roomId, form.value.startLocal], () => { 
   fetchRoomSchedule() 
+})
+
+/* ---------- เพิ่ม: selectedRoom (ใช้ id จาก form.roomId เพื่อหา object ห้องจาก rooms) ---------- */
+const selectedRoom = computed(() => {
+  // รองรับรูปแบบ form เป็น ref หรือ plain object
+  const roomId = (form && form.value ? form.value.roomId : form.roomId) ?? null
+  if (roomId === null || typeof roomId === 'undefined') return null
+  return rooms.value.find(r => String(r.id) === String(roomId)) || null
 })
 </script>
 

@@ -402,12 +402,6 @@
               <TodayCalendar />
             </div>
           </div>
-
-          <!-- Announcements -->
-          <div class="modern-card shadow-md">
-            <h2 class="text-xl font-semibold text-gray-900 mb-6">ประกาศ</h2>
-            <Announcements />
-          </div>
         </div>
       </main>
     </div>

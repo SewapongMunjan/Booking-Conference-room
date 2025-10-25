@@ -282,7 +282,7 @@
             <div class="flex items-center justify-between mb-6">
               <h2 class="text-2xl font-semibold text-gray-900">สถิติการจอง - วันนี้ {{ currentDate }} {{ currentMonth }} {{ currentYear }}</h2>
               <span class="text-sm text-gray-500 flex items-center gap-1.5">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0114 0z"/></svg>
                 อัปเดต: {{ currentTime }}
               </span>
             </div>
@@ -303,25 +303,16 @@
                   <div class="w-14 h-14 rounded-xl bg-green-500 flex items-center justify-center text-2xl shadow-sm">✅</div>
                 </div>
                 <div class="text-5xl font-bold text-green-700 mb-2">{{ kpi.approved }}</div>
-                <div class="text-sm text-green-600 flex items-center gap-2">
-                  <span>ยืนยันแล้ว</span>
-                  <span v-if="deltas.approved !== 0" class="text-xs px-2 py-0.5 rounded-full" :class="deltas.approved > 0 ? 'bg-green-100 text-green-700' : 'bg-rose-100 text-rose-700'">
-                    {{ deltas.approved > 0 ? '+'+deltas.approved : deltas.approved }}
-                  </span>
-                </div>
+                <div class="text-sm text-green-600">สถานะ: APPROVED</div>
               </div>
 
               <div class="stat-card bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200 shadow-md hover:shadow-lg transition-shadow">
                 <div class="flex items-center justify-between mb-4">
-                  <span class="text-base font-medium text-amber-700">รออนุมัติ</span>
+                  <span class="text-base font-medium text-amber-700">รอการยืนยันผู้เข้าร่วม</span>
                   <div class="w-14 h-14 rounded-xl bg-amber-500 flex items-center justify-center text-2xl shadow-sm">⏳</div>
                 </div>
                 <div class="text-5xl font-bold text-amber-700 mb-2">{{ kpi.pending }}</div>
-                <div class="text-sm text-amber-600">รอดำเนินการ
-                  <span v-if="deltas.pending !== 0" class="text-xs px-2 py-0.5 rounded-full ml-2" :class="deltas.pending > 0 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-700'">
-                    {{ deltas.pending > 0 ? '+'+deltas.pending : deltas.pending }}
-                  </span>
-                </div>
+                <div class="text-sm text-amber-600">สถานะ: AWAITING_ATTENDEE_CONFIRM</div>
               </div>
 
               <div class="stat-card bg-gradient-to-br from-red-50 to-red-100 border-red-200 shadow-md hover:shadow-lg transition-shadow">
@@ -330,7 +321,7 @@
                   <div class="w-14 h-14 rounded-xl bg-red-500 flex items-center justify-center text-2xl shadow-sm">❌</div>
                 </div>
                 <div class="text-5xl font-bold text-red-700 mb-2">{{ kpi.cancelled ?? 0 }}</div>
-                <div class="text-sm text-red-600">ถูกยกเลิก</div>
+                <div class="text-sm text-red-600">สถานะ: CANCELLED</div>
               </div>
             </div>
           </section>
@@ -344,16 +335,29 @@
                 <div class="flex items-center justify-between mb-6">
                   <div>
                     <h4 class="font-semibold text-gray-900 text-lg">การใช้งานห้องประชุม</h4>
-                    <p class="text-sm text-gray-500 mt-1">สถิติ 7 วันล่าสุด</p>
+                    <p class="text-sm text-gray-500 mt-1">สถิติย้อนหลัง</p>
+                  </div>
+                  <div class="text-sm text-gray-500">
+                    <select v-model="days" class="px-2 py-1 border border-gray-200 rounded-lg text-sm">
+                      <option :value="7">7 วันล่าสุด</option>
+                      <option :value="30">30 วันล่าสุด</option>
+                    </select>
                   </div>
                 </div>
-                <div class="h-64 flex items-end gap-4">
-                  <div v-for="i in 7" :key="i" class="flex-1">
-                    <div class="bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-xl hover:from-blue-600 hover:to-blue-500 cursor-pointer transition-all shadow-sm" :style="{height: (20 + i * 10) + '%'}"></div>
-                    <div class="text-center text-sm text-gray-500 font-medium mt-3">
-                      {{ ['อา','จ','อ','พ','พฤ','ศ','ส'][i-1] }}
-                    </div>
+
+                <div class="h-64 flex items-end gap-2">
+                  <div
+                    v-for="(v, i) in chartData"
+                    :key="i"
+                    class="flex-1 bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-lg relative group hover:from-blue-600 hover:to-blue-500 transition-all cursor-pointer"
+                    :style="{ height: Math.max(10, v.valuePct) + '%' }"
+                    :title="`${v.label}: ${v.count} การจอง`"
+                  >
+                    <div class="absolute -top-8 left-1/2 -translate-x-1/2 text-sm font-semibold text-gray-700">{{ v.count }}</div>
                   </div>
+                </div>
+                <div class="mt-4 grid" :style="{ gridTemplateColumns: `repeat(${chartData.length}, 1fr)` }">
+                  <div v-for="(v, i) in chartData" :key="'l' + i" class="text-center text-xs text-gray-500">{{ v.label }}</div>
                 </div>
               </div>
 
@@ -381,53 +385,31 @@
 
             <!-- Right Column -->
             <div class="space-y-6">
-              <!-- Calendar -->
+              <!-- Upcoming meetings (next 24 hours / in progress) -->
               <div class="modern-card shadow-md">
                 <div class="flex items-center justify-between mb-4">
-                  <h4 class="font-semibold text-gray-900 text-base">ปฏิทิน</h4>
-                  <div class="text-right">
-                    <div class="text-3xl font-bold text-blue-600">{{ currentDate }}</div>
-                    <div class="text-xs text-gray-500 font-medium mt-0.5">{{ currentMonth }} {{ currentYear }}</div>
-                  </div>
+                  <h4 class="font-semibold text-gray-900 text-base">การประชุมกำลังจะมาถึง</h4>
+                  <div class="text-sm text-gray-500">ภายใน 24 ชั่วโมง</div>
                 </div>
-                <div class="grid grid-cols-7 gap-1.5">
-                  <div v-for="day in ['อา','จ','อ','พ','พฤ','ศ','ส']" :key="day" class="text-center text-xs font-semibold text-gray-500 py-1.5">{{ day }}</div>
-                  <div
-                    v-for="d in calendarDates"
-                    :key="d.key"
-                    class="aspect-square flex items-center justify-center rounded-md text-sm font-medium cursor-pointer transition-all"
-                    :class="d.isToday ? 'bg-blue-500 text-white shadow-sm scale-105' : d.isOtherMonth ? 'text-gray-300' : 'text-gray-700 hover:bg-gray-100'"
-                  >
-                    {{ d.date }}
-                  </div>
-                </div>
-              </div>
 
-              <!-- Announcements -->
-              <div class="modern-card shadow-md">
-                <div class="flex items-center gap-2 mb-5">
-                  <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-lg shadow-sm">
-                    📢
-                  </div>
-                  <h4 class="font-semibold text-gray-900 text-lg">ประกาศ</h4>
-                </div>
-                <div class="space-y-3">
-                  <div class="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 hover:shadow-md cursor-pointer transition-all">
-                    <div class="font-semibold text-gray-900 text-sm">ปิดระบบเสาร์ที่ 20:00-22:00</div>
-                    <div class="text-sm text-gray-600 mt-1">ปรับปรุงระบบ</div>
-                    <div class="text-xs text-gray-400 mt-2 flex items-center gap-1.5">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                      10/21/2025
-                    </div>
-                  </div>
-                  <div class="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200 hover:shadow-md cursor-pointer transition-all">
-                    <div class="font-semibold text-gray-900 text-sm">เพิ่มฟีเจอร์แจ้งเตือน</div>
-                    <div class="text-sm text-gray-600 mt-1">ตอนนี้ส่งอีเมลแล้ว</div>
-                    <div class="text-xs text-gray-400 mt-2 flex items-center gap-1.5">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                      10/21/2025
-                    </div>
-                  </div>
+                <div v-if="loadingUpcoming" class="py-6 text-center text-gray-500">กำลังโหลด...</div>
+                <div v-else>
+                  <div v-if="comingSoon.length === 0" class="text-gray-500 py-6 text-center">ไม่มีการประชุมที่กำลังจะมาถึง</div>
+                  <ul class="space-y-3">
+                    <li v-for="u in comingSoon" :key="u.id" class="p-3 bg-white border rounded-lg flex items-start gap-3">
+                      <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-50 flex items-center justify-center text-lg font-semibold text-blue-700 shrink-0">
+                        {{ formatDay(u.start) }}
+                      </div>
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <div class="font-medium text-sm">{{ u.title || u.room?.roomName || 'ห้องประชุม' }}</div>
+                          <span class="text-xs px-2 py-0.5 rounded-full" :class="statusClass(u.status)">{{ statusLabel(u.status) }}</span>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">{{ formatDate(u.start) }} · {{ timeRange(u.start, u.end) }}</div>
+                        <div class="text-xs text-gray-600 mt-2">ผู้จอง: {{ u.requester?.name || '-' }}</div>
+                      </div>
+                    </li>
+                  </ul>
                 </div>
               </div>
             </div>
@@ -439,8 +421,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'   // { ADDED }
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
 
 const router = useRouter()
@@ -669,13 +651,292 @@ async function loadKpi() {
   deltas.value.pending = d.deltaPending ?? d.pendingDelta ?? 0
 }
 
-// lifecycle (merge with yours)
+// ADD/REPLACE: days + chartData (reuse admin logic)
+const days = ref(7)
+const chartData = ref([])
+
+function groupByDate(items, daysBack) {
+  const map = new Map()
+  for (let i = daysBack - 1; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    d.setHours(0, 0, 0, 0)
+    map.set(d.toISOString().slice(0, 10), { date: d, count: 0 })
+  }
+  items.forEach(b => {
+    // support multiple start field names
+    const s = b.startAt ?? b.startTime ?? b.start ?? b.from
+    if (!s) return
+    const k = new Date(s)
+    if (Number.isNaN(k.getTime())) return
+    k.setHours(0, 0, 0, 0)
+    const key = k.toISOString().slice(0, 10)
+    if (map.has(key)) map.get(key).count++
+  })
+  const max = Math.max(1, ...Array.from(map.values()).map(v => v.count))
+  return Array.from(map.values()).map(v => ({
+    label: v.date.toLocaleDateString('th-TH', { weekday: 'short' }),
+    count: v.count,
+    valuePct: Math.round((v.count / max) * 100)
+  }))
+}
+
+async function loadRecentAndChart() {
+  try {
+    const since = new Date()
+    since.setDate(since.getDate() - days.value)
+    // try bookings endpoint; adjust params if backend differs
+    const res = await api.get('/api/bookings', {
+      params: { page: 1, pageSize: 500, start_gte: since.toISOString() }
+    })
+    const list = Array.isArray(res?.data?.items) ? res.data.items : (Array.isArray(res?.data) ? res.data : [])
+    chartData.value = groupByDate(list, Math.min(days.value, 30))
+  } catch (e) {
+    console.error('loadRecentAndChart', e)
+    chartData.value = []
+  }
+}
+
+// call after mount and when days changes or bookings change
 onMounted(() => {
-  loadKpi()
-  window.addEventListener('bookings:changed', loadKpi)
+  // existing onMounted code runs too; add call
+  loadRecentAndChart()
+  window.addEventListener('bookings:changed', loadRecentAndChart)
 })
 onUnmounted(() => {
-  window.removeEventListener('bookings:changed', loadKpi)
+  window.removeEventListener('bookings:changed', loadRecentAndChart)
+})
+
+// if days selectable, refresh on change
+watch(days, () => loadRecentAndChart())
+
+// ADD: upcoming meetings (7 days)
+const upcoming = ref([])
+const loadingUpcoming = ref(false)
+const comingSoon = ref([]) // <-- สำหรับประชุมที่จะเกิดขึ้นภายใน 24 ชั่วโมง
+
+function toISODate(dt) {
+  const d = new Date(dt)
+  return d.toISOString().slice(0,10)
+}
+
+function formatDate(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '-'
+  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()+543}`
+}
+function formatDay(iso){
+  const d = new Date(iso); if (Number.isNaN(d.getTime())) return ''
+  return d.getDate()
+}
+function timeRange(s,e){
+  if(!s||!e) return '-'
+  const o = { hour:'2-digit', minute:'2-digit' }
+  return `${new Date(s).toLocaleTimeString('th-TH', o)} - ${new Date(e).toLocaleTimeString('th-TH', o)}`
+}
+function statusLabel(s){ if(!s) return 'รอเริ่ม'; if(s==='IN_PROGRESS') return 'กำลังประชุม'; if(s==='DONE') return 'เสร็จสิ้น'; return s }
+function statusClass(s){ if(s==='IN_PROGRESS') return 'bg-green-100 text-green-700'; if(s==='DONE') return 'bg-blue-100 text-blue-700'; return 'bg-amber-100 text-amber-800' }
+
+async function fetchUpcoming() {
+  loadingUpcoming.value = true
+  try {
+    const now = new Date()
+    const start = toISODate(now)
+    const endDate = new Date(now); endDate.setDate(now.getDate() + 7)
+    const end = toISODate(endDate)
+    // try candidate endpoints, fallback to bookings list with date range
+    const candidates = [
+      ['/api/bookings', { params: { from: start, to: end, page: 1, pageSize: 200 } }],
+      ['/api/bookings/upcoming', { params: { days: 7 } }],
+      ['/api/bookings', { params: { dateFrom: start, dateTo: end, page: 1, pageSize: 200 } }]
+    ]
+    let res = null
+    for (const [url, opt] of candidates) {
+      try {
+        res = await api.get(url, opt)
+        if (res?.status === 200) break
+      } catch (e) { res = null }
+    }
+    if (!res) {
+      upcoming.value = []
+      return
+    }
+    const data = res.data?.items ?? res.data ?? []
+    // normalize: ensure start/end and requester/room available
+    upcoming.value = (Array.isArray(data) ? data : []).map(it => ({
+      id: it.id,
+      title: it.title || it.room?.name || it.roomName,
+      room: it.room || { roomName: it.roomName },
+      requester: it.requester || it.user || it.owner || {},
+      status: it.status,
+      start: it.startAt ?? it.startTime ?? it.start,
+      end: it.endAt ?? it.endTime ?? it.end
+    })).filter(i => i.start) // keep only with start
+  } catch (e) {
+    console.error('fetchUpcoming', e)
+    upcoming.value = []
+  } finally {
+    loadingUpcoming.value = false
+  }
+}
+
+// call fetchUpcoming on mount with other inits
+onMounted(async () => {
+  updateDateTime()
+  clockTimer = setInterval(updateDateTime, 1000)
+  await fetchMe()
+  await fetchNotifications()
+  await fetchUpcoming()        // <-- fetch upcoming here
+  notiTimer = setInterval(() => fetchNotifications(), 30000)
+  document.addEventListener('click', handleClickOutside)
+})
+
+// also refresh upcoming when KPIs load
+onMounted(() => {
+  loadKpi()
+  window.addEventListener('bookings:changed', () => {
+    loadKpi()
+    fetchUpcoming()
+  })
+})
+
+// ใหม่: ฟังก์ชันสำหรับดึงการประชุมที่จะเกิดขึ้นภายใน 24 ชั่วโมง
+async function fetchComingSoon() {
+  loadingUpcoming.value = true
+  try {
+    const now = new Date()
+    const start = toISODate(now)
+    const endDate = new Date(now); endDate.setHours(now.getHours() + 24)
+    const end = toISODate(endDate)
+    // try candidate endpoints, fallback to bookings list with date range
+    const candidates = [
+      ['/api/bookings', { params: { from: start, to: end, page: 1, pageSize: 200 } }],
+      ['/api/bookings/coming-soon', { params: { hours: 24 } }],
+      ['/api/bookings', { params: { dateFrom: start, dateTo: end, page: 1, pageSize: 200 } }]
+    ]
+    let res = null
+    for (const [url, opt] of candidates) {
+      try {
+        res = await api.get(url, opt)
+        if (res?.status === 200) break
+      } catch (e) { res = null }
+    }
+    if (!res) {
+      comingSoon.value = []
+      return
+    }
+    const data = res.data?.items ?? res.data ?? []
+    // normalize: ensure start/end and requester/room available
+    comingSoon.value = (Array.isArray(data) ? data : []).map(it => ({
+      id: it.id,
+      title: it.title || it.room?.name || it.roomName,
+      room: it.room || { roomName: it.roomName },
+      requester: it.requester || it.user || it.owner || {},
+      status: it.status,
+      start: it.startAt ?? it.startTime ?? it.start,
+      end: it.endAt ?? it.endTime ?? it.end
+    })).filter(i => i.start) // keep only with start
+  } catch (e) {
+    console.error('fetchComingSoon', e)
+    comingSoon.value = []
+  } finally {
+    loadingUpcoming.value = false
+  }
+}
+
+// เรียกใช้ฟังก์ชัน fetchComingSoon เมื่อ component ถูก mount
+onMounted(async () => {
+  updateDateTime()
+  clockTimer = setInterval(updateDateTime, 1000)
+  await fetchMe()
+  await fetchNotifications()
+  await fetchUpcoming()
+  await fetchComingSoon()        // <-- fetch coming soon here
+  notiTimer = setInterval(() => fetchNotifications(), 30000)
+  document.addEventListener('click', handleClickOutside)
+})
+
+// อัปเดต KPI และการประชุมที่กำลังจะมาถึงเมื่อมีการเปลี่ยนแปลงการจอง
+onMounted(() => {
+  loadKpi()
+  window.addEventListener('bookings:changed', () => {
+    loadKpi()
+    fetchUpcoming()
+    fetchComingSoon() // <-- refresh coming soon
+  })
+})
+
+// NEW: usage 7 days (ensure these names not colliding with existing vars)
+const usage7Days = ref([0,0,0,0,0,0,0])
+const labels7Days = ref([])
+const labels7DaysShort = ref([])
+const usageMax = computed(() => Math.max(...usage7Days.value, 1))
+
+function build7DayLabels(){
+  const now = new Date()
+  const daysFull = []
+  const daysShort = []
+  for (let i = 6; i >= 0; i--){
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    const dayNum = d.getDate()
+    const weekShort = ['อา','จ','อ','พ','พฤ','ศ','ส'][d.getDay()]
+    const monthShort = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][d.getMonth()]
+    daysFull.push(`${weekShort} ${dayNum} ${monthShort}`)
+    daysShort.push(weekShort)
+  }
+  labels7Days.value = daysFull
+  labels7DaysShort.value = daysShort
+}
+
+function barHeight(val){
+  const max = usageMax.value || 1
+  const pct = Math.round((val / max) * 100)
+  return `${Math.max(6, pct)}%`
+}
+
+async function fetchUsage7Days(){
+  try {
+    const now = new Date()
+    const start = new Date(now); start.setDate(now.getDate() - 6)
+    const end = new Date(now)
+    const startISO = toISODate(start)
+    const endISO = toISODate(end)
+    // request bookings for last 7 days (backend may accept from/to params)
+    const res = await api.get('/api/bookings', { params: { from: startISO, to: endISO, page:1, pageSize:1000 } })
+    const data = res?.data?.items ?? res?.data ?? []
+    const counts = Array(7).fill(0)
+    const bookings = Array.isArray(data) ? data : []
+    for (const b of bookings){
+      const s = b.startAt ?? b.startTime ?? b.start ?? b.from
+      if (!s) continue
+      const sd = new Date(s)
+      if (Number.isNaN(sd.getTime())) continue
+      const dayStart = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+      const diff = Math.floor((new Date(sd.getFullYear(), sd.getMonth(), sd.getDate()) - dayStart) / (24*3600*1000))
+      if (diff >=0 && diff < 7){
+        counts[diff] += 1
+      }
+    }
+    usage7Days.value = counts
+    build7DayLabels()
+  } catch (e) {
+    console.error('fetchUsage7Days', e)
+    usage7Days.value = [0,0,0,0,0,0,0]
+    build7DayLabels()
+  }
+}
+
+// ensure we call this at mount and when bookings change
+onMounted(() => {
+  fetchUsage7Days()
+  window.addEventListener('bookings:changed', fetchUsage7Days)
+})
+
+// cleanup
+onUnmounted(() => {
+  window.removeEventListener('bookings:changed', fetchUsage7Days)
 })
 </script>
 

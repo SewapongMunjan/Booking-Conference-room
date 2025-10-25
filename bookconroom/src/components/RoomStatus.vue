@@ -506,13 +506,76 @@ function handleClickOutside (e) {
 }
 
 // Room status functions
+let roomRefreshTimer = null
+
 async function fetchRoomStatus() {
   loading.value = true
   try {
-    const { data } = await api.get('/api/rooms/status')
-    roomStatuses.value = Array.isArray(data) ? data : []
+    const now = new Date()
+    const fromDate = new Date(now); fromDate.setDate(now.getDate() - 1)
+    const toDate = new Date(now); toDate.setDate(now.getDate() + 7)
+
+    const [roomsRes, bookingsRes] = await Promise.all([
+      api.get('/api/rooms', { params: { all: 1 } }),
+      api.get('/api/bookings', { params: { from: fromDate.toISOString().slice(0,10), to: toDate.toISOString().slice(0,10), page: 1, pageSize: 1000 } })
+    ])
+
+    const roomsRaw = roomsRes?.data?.items ?? roomsRes?.data ?? []
+    const bookingsRaw = bookingsRes?.data?.items ?? bookingsRes?.data ?? []
+
+    // normalize bookings: unify start/end field names to ISO strings
+    const bookings = (Array.isArray(bookingsRaw) ? bookingsRaw : []).map(b => {
+      const s = b.startAt ?? b.startTime ?? b.start ?? b.from
+      const e = b.endAt ?? b.endTime ?? b.end ?? b.to
+      return { ...b, start: s ? new Date(s).toISOString() : null, end: e ? new Date(e).toISOString() : null }
+    }).filter(b => b.start && b.end)
+
+    roomStatuses.value = (Array.isArray(roomsRaw) ? roomsRaw : []).map(r => {
+      const roomId = r.id
+      // select bookings for this room (handle different backend shapes)
+      const roomBookings = bookings.filter(b =>
+        (b.roomId && String(b.roomId) === String(roomId)) ||
+        (b.room && (String(b.room.id) === String(roomId) || String(b.room.roomName) === String(r.roomName))) ||
+        (b.roomId === roomId)
+      )
+
+      const nowDate = new Date()
+      const current = roomBookings.find(b => {
+        const s = new Date(b.start); const e = new Date(b.end)
+        return s <= nowDate && nowDate < e
+      }) || null
+
+      const next = roomBookings
+        .filter(b => new Date(b.start) > nowDate)
+        .sort((a,b) => new Date(a.start) - new Date(b.start))[0] || null
+
+      // base on manual room.status unless maintenance/unavailable
+      let status = (r.status || '').toString().toUpperCase()
+      if (status === 'UNAVAILABLE' || status === 'MAINTENANCE') {
+        status = 'MAINTENANCE'
+      } else if (current) {
+        status = 'IN_USE'
+      } else if (next) {
+        status = 'RESERVED'
+      } else {
+        status = 'AVAILABLE'
+      }
+
+      return {
+        room: {
+          id: roomId,
+          roomName: r.roomName || r.name || `ห้อง ${roomId}`,
+          capacity: r.capacity ?? null,
+          floor: r.floor ?? null
+        },
+        status,
+        statusLabel: r.statusLabel || status,
+        currentBooking: current ? { startTime: current.start, endTime: current.end, bookedBy: current.requester || current.user || current.bookedBy } : null,
+        nextBooking: next ? { startTime: next.start, endTime: next.end, bookedBy: next.requester || next.user || next.bookedBy } : null
+      }
+    })
   } catch (e) {
-    console.error(e)
+    console.error('fetchRoomStatus', e)
     roomStatuses.value = []
   } finally {
     loading.value = false
@@ -586,14 +649,17 @@ onMounted(async () => {
   await fetchRoomStatus()
   await fetchNotifications()
   updateCurrentTime()
-  
+
+  // refresh room status every 60s
+  roomRefreshTimer = setInterval(fetchRoomStatus, 60000)
   notiTimer = setInterval(() => fetchNotifications(), 30000)
   clockTimer = setInterval(updateCurrentTime, 1000)
-  
+
   document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
+  if (roomRefreshTimer) clearInterval(roomRefreshTimer)
   if (notiTimer) clearInterval(notiTimer)
   if (clockTimer) clearInterval(clockTimer)
   document.removeEventListener('click', handleClickOutside)

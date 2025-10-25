@@ -89,21 +89,44 @@
             </div>
             <div>
               <h1 class="text-3xl font-bold text-gray-900 m-0">Room Status</h1>
-              <p class="text-base text-gray-500 m-0 mt-1">ตรวจสอบสถานะห้องประชุม</p>
+              <p class="text-base text-gray-500 m-0 mt-1">ตรวจสอบและอัพเดตสถานะห้องประชุม</p>
             </div>
           </div>
 
           <!-- Room Status Cards -->
           <div class="modern-card shadow-md">
-            <div class="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div v-if="loading" class="text-gray-500 py-8 text-center">กำลังโหลดข้อมูล...</div>
+
+            <div v-else class="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               <div v-for="r in rooms" :key="r.id" class="p-4 rounded-xl border"
-                   :class="r.status==='FREE'?'bg-green-50 border-green-200':'bg-rose-50 border-rose-200'">
-                <div class="font-semibold">{{ r.name }}</div>
-                <div class="text-xs text-gray-600">ชั้น {{ r.floor }} · {{ r.type }}</div>
-                <div class="mt-2 text-sm" :class="r.status==='FREE'?'text-green-700':'text-rose-700'">
-                  {{ r.status==='FREE'?'ว่าง':'ไม่ว่าง' }}
+                   :class="r.status==='AVAILABLE' ? 'bg-green-50 border-green-200' : 'bg-rose-50 border-rose-200'">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <div class="font-semibold">{{ r.roomName || r.name }}</div>
+                    <div class="text-xs text-gray-600">ชั้น {{ r.floor ?? '-' }} · ความจุ {{ r.capacity ?? '-' }}</div>
+                    <div class="mt-2 text-sm" :class="r.status==='AVAILABLE' ? 'text-green-700' : 'text-rose-700'">
+                      {{ r.statusLabel || (r.status==='AVAILABLE' ? 'ว่าง' : 'ไม่ว่าง') }}
+                    </div>
+                  </div>
+
+                  <div class="w-36">
+                    <label class="text-xs text-gray-500">เปลี่ยนสถานะ</label>
+                    <select :disabled="updating[r.id]" class="mt-2 w-full rounded-lg border px-2 py-1 text-sm"
+                            :value="r.status" @change="onChangeStatus(r, $event.target.value)">
+                      <option value="AVAILABLE">AVAILABLE</option>
+                      <option value="UNAVAILABLE">UNAVAILABLE</option>
+                    </select>
+
+                    <button v-if="r.status !== originalStatus[r.id]" @click="saveStatus(r)" :disabled="updating[r.id]"
+                            class="mt-3 w-full px-3 py-2 rounded-lg text-sm border bg-white hover:bg-gray-50">
+                      บันทึก
+                    </button>
+
+                    <div v-if="updating[r.id]" class="text-xs text-gray-500 mt-2">กำลังอัพเดต...</div>
+                  </div>
                 </div>
               </div>
+
               <div v-if="!rooms.length" class="text-gray-500 text-sm">ไม่มีข้อมูล</div>
             </div>
           </div>
@@ -114,14 +137,84 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import api from '@/lib/api.js'
+import Swal from 'sweetalert2'
 
 const rooms = ref([])
+const loading = ref(false)
+const updating = reactive({})
+const originalStatus = reactive({})
+const me = ref(null)
+
+// load all rooms with status
 async function load(){
-  const { data } = await api.get('/api/rooms',{ params:{ page:1, pageSize:100 } })
-  rooms.value = Array.isArray(data?.items)? data.items : []
+  loading.value = true
+  try {
+    const res = await api.get('/api/rooms', { params: { all: 1 } })
+    const items = res?.data?.items ?? []
+    rooms.value = Array.isArray(items) ? items : []
+    // keep original status snapshot
+    rooms.value.forEach(r => {
+      originalStatus[r.id] = r.status
+      updating[r.id] = false
+    })
+  } catch (e) {
+    console.error('load rooms', e)
+    rooms.value = []
+  } finally {
+    loading.value = false
+  }
 }
+
+function onChangeStatus(room, newStatus){
+  // update UI immediately but keep originalStatus for save button logic
+  const idx = rooms.value.findIndex(x => x.id === room.id)
+  if (idx !== -1) rooms.value[idx].status = newStatus
+}
+
+async function saveStatus(room){
+  const id = room.id
+  const newStatus = room.status
+  const prev = originalStatus[id]
+  if (newStatus === prev) return
+
+  const confirm = await Swal.fire({
+    title: 'ยืนยันการเปลี่ยนสถานะ',
+    text: `เปลี่ยนสถานะห้อง "${room.roomName || room.name}" เป็น ${newStatus}?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'ใช่, เปลี่ยนสถานะ',
+    cancelButtonText: 'ยกเลิก'
+  })
+  if (!confirm.isConfirmed) {
+    // revert change in UI
+    const idx = rooms.value.findIndex(x => x.id === id)
+    if (idx !== -1) rooms.value[idx].status = prev
+    return
+  }
+
+  try {
+    updating[id] = true
+    // call backend to update status - backend route PUT /api/rooms/:id
+    const res = await api.put(`/api/rooms/${id}`, { status: newStatus })
+    const updated = res?.data?.item ?? res?.data ?? {}
+    // update local item and snapshot
+    const idx = rooms.value.findIndex(x => x.id === id)
+    if (idx !== -1) rooms.value[idx] = { ...rooms.value[idx], ...updated }
+    originalStatus[id] = newStatus
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'อัพเดตสถานะเรียบร้อย', timer: 1400, showConfirmButton: false })
+  } catch (e) {
+    console.error('saveStatus', e)
+    Swal.fire({ icon: 'error', title: 'อัพเดตสถานะล้มเหลว', text: e?.response?.data?.error || e?.message || '' })
+    // revert UI
+    const idx = rooms.value.findIndex(x => x.id === id)
+    if (idx !== -1) rooms.value[idx].status = prev
+  } finally {
+    updating[id] = false
+  }
+}
+
 onMounted(load)
 </script>
 

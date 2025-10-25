@@ -61,17 +61,71 @@
             <section class="lg:col-span-1 modern-card">
               <h3 class="font-medium mb-4">ขออนุญาตลา</h3>
 
+              <label class="block text-sm text-gray-600">ลากระทันหัน / ฉุกเฉิน</label>
+              <div class="mb-3">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" v-model="isEmergency" class="form-checkbox h-4 w-4" />
+                  <span class="text-sm text-gray-700">ลากระทันหัน (ส่งคำขอได้ทันที ไม่ต้องรอล่วงหน้า 2 วัน)</span>
+                </label>
+              </div>
+
+              <!-- show today's tasks when emergency checked -->
+              <div v-if="isEmergency" class="mb-4 p-3 border rounded-lg bg-gray-50">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="text-sm font-medium">งาน / ภารกิจวันนี้ ({{ todayISO }})</div>
+                  <button v-if="!tasksLoading" @click="fetchTodayTasks" class="text-xs px-2 py-1 rounded bg-white border">รีเฟรช</button>
+                </div>
+
+                <div v-if="tasksLoading" class="text-xs text-gray-500">กำลังโหลดงานวันนี้...</div>
+                <div v-else>
+                  <div v-if="!tasksToday.length" class="text-xs text-gray-500">ไม่พบงานในวันนี้</div>
+                  <ul class="space-y-2">
+                    <li v-for="t in tasksToday" :key="t.id" class="flex items-start gap-3">
+                      <label class="inline-flex items-center gap-2">
+                        <input type="checkbox" v-model="selectedTasks" :value="t.id" class="form-checkbox h-4 w-4" />
+                      </label>
+                      <div class="flex-1 text-sm">
+                        <div class="font-medium">{{ t.title || t.summary || t.name }}</div>
+                        <div class="text-xs text-gray-500">{{ t.timeRange || t.start }}</div>
+                        <div class="text-xs text-gray-400">{{ t.location || t.roomName || '' }}</div>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
               <label class="block text-sm text-gray-600">วันที่เริ่ม</label>
-              <input type="date" v-model="from" class="w-full mt-1 mb-3 p-2 border rounded-md" />
+              <input
+                type="date"
+                v-model="from"
+                :min="minStartForForm"
+                class="w-full mt-1 mb-3 p-2 border rounded-md"
+              />
 
               <label class="block text-sm text-gray-600">วันที่สิ้นสุด</label>
-              <input type="date" v-model="to" class="w-full mt-1 mb-3 p-2 border rounded-md" />
+              <input
+                type="date"
+                v-model="to"
+                :min="from || minStartForForm"
+                class="w-full mt-1 mb-3 p-2 border rounded-md"
+              />
+
+              <div class="text-xs text-gray-500 mb-3" v-if="!isEmergency">
+                คำขอปกติต้องส่งล่วงหน้าอย่างน้อย 2 วัน (วันเริ่มขั้นต่ำ: {{ minStartForForm }})
+              </div>
+              <div class="text-xs text-gray-500 mb-3" v-else>
+                ลากระทันหัน: สามารถเริ่มได้ตั้งแต่วันนี้ ({{ minStartForForm }})
+              </div>
 
               <label class="block text-sm text-gray-600">เหตุผล</label>
               <textarea v-model="reason" rows="4" class="w-full mt-1 p-2 border rounded-md"></textarea>
 
               <div class="mt-4 flex justify-end">
-                <button class="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700" @click="submitLeave" :disabled="submitting">
+                <button
+                  class="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                  @click="submitLeave"
+                  :disabled="submitting || !canSubmit"
+                >
                   {{ submitting ? 'กำลังส่ง...' : 'ส่งคำขอลา' }}
                 </button>
               </div>
@@ -146,7 +200,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
 import Swal from 'sweetalert2'
@@ -158,6 +212,7 @@ const router = useRouter()
 const from = ref('')
 const to = ref('')
 const reason = ref('')
+const isEmergency = ref(false)
 const submitting = ref(false)
 const loading = ref(true)
 const leaves = ref([])
@@ -165,7 +220,18 @@ const requests = ref([])
 const fetchError = ref('')
 const me = ref({ name: '', email: '', avatarUrl: '' })
 
-// ========== helpers ==========
+// NEW: tasks today for emergency mode
+const tasksToday = ref([])
+const tasksLoading = ref(false)
+const selectedTasks = ref([])
+
+const todayISO = computed(() => {
+  const d = new Date(); d.setHours(0,0,0,0)
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0')
+  return `${y}-${m}-${dd}`
+})
+
+// helper date formatting
 function pad(n){ return String(n).padStart(2, '0') }
 function yyyy_mm_dd(d){
   const y = d.getFullYear(), m = pad(d.getMonth()+1), dd = pad(d.getDate())
@@ -177,6 +243,33 @@ function* eachDate(aStr, bStr){
     yield yyyy_mm_dd(d)
   }
 }
+
+// MIN dates for form
+const minStartForForm = computed(() => {
+  const today = new Date()
+  const base = new Date(today); base.setHours(0,0,0,0)
+  if (isEmergency.value) {
+    return yyyy_mm_dd(base) // today
+  }
+  // normal request: today + 2 days
+  const early = new Date(base); early.setDate(early.getDate() + 2)
+  return yyyy_mm_dd(early)
+})
+
+// form validation guard
+const canSubmit = computed(() => {
+  if (!from.value || !reason.value) return false
+  const start = new Date(from.value); start.setHours(0,0,0,0)
+  const minAllowed = new Date(minStartForForm.value); minAllowed.setHours(0,0,0,0)
+  if (start < minAllowed) return false
+  if (to.value) {
+    const end = new Date(to.value); end.setHours(0,0,0,0)
+    if (end < start) return false
+  }
+  return true
+})
+
+// ========== helpers ==========
 function leaveStatusTH(s){
   if (s === 'PENDING') return 'รออนุมัติ'
   if (s === 'APPROVED') return 'อนุมัติแล้ว'
@@ -238,62 +331,127 @@ async function load(){
 }
 
 async function newRequest(){
-  const r = await Swal.fire({
+  const today = new Date(); today.setHours(0,0,0,0)
+  const minDate = yyyy_mm_dd(today)
+  const { value: formValues, isConfirmed } = await Swal.fire({
     title: 'ขอความช่วยเหลือ/แทนที่',
     html: `
-      <input id="start" class="swal2-input" placeholder="จากวันที่ (YYYY-MM-DD)">
-      <input id="end" class="swal2-input" placeholder="ถึงวันที่ (YYYY-MM-DD)">
+      <input id="swal-start" type="date" class="swal2-input" min="${minDate}" placeholder="จากวันที่ (YYYY-MM-DD)">
+      <input id="swal-end" type="date" class="swal2-input" min="${minDate}" placeholder="ถึงวันที่ (YYYY-MM-DD)">
     `,
     focusConfirm: false,
+    showCancelButton: true,
     preConfirm: () => {
-      const s = (document.getElementById('start') || {}).value || ''
-      const e = (document.getElementById('end')   || {}).value || ''
+      const s = (document.getElementById('swal-start') || {}).value || ''
+      const e = (document.getElementById('swal-end')   || {}).value || ''
+      if (!s) {
+        Swal.showValidationMessage('กรุณาระบุวันที่เริ่ม')
+        return false
+      }
+      if (e && new Date(e) < new Date(s)) {
+        Swal.showValidationMessage('วันที่สิ้นสุดต้องไม่อยู่ก่อนวันที่เริ่ม')
+        return false
+      }
       return { start: s, end: e }
     }
   })
-  if (!r.isConfirmed) return
+  if (!isConfirmed || !formValues) return
   try{
-    await api.post('/api/notetakers/requests', { start: r.value.start, end: r.value.end })
+    await api.post('/api/notetakers/requests', { start: formValues.start, end: formValues.end })
     Swal.fire({ icon: 'success', title: 'ส่งคำขอแล้ว' })
+    // refresh local requests list
     const res = await api.get('/api/notetakers/requests')
     requests.value = res.data?.items || []
+    // notify other parts of the app (SubstituteManager) to reload
+    window.dispatchEvent(new Event('notetakers:requests:changed'))
   }catch(e){
     console.error('newRequest', e)
-    Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ' })
+    Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ', text: e?.response?.data?.error || e?.message })
   }
 }
 
 /** ส่งลาแบบช่วงวัน → แปลงเป็น daily leave: POST /api/notetakers/leave ทีละวัน */
 async function submitLeave(){
-  if (!from.value || !reason.value) { alert('กรุณากรอกวันที่เริ่มและเหตุผล'); return }
-  const toVal = to.value || from.value
+  if (!canSubmit.value) {
+    await Swal.fire({ icon:'warning', title:'ข้อมูลไม่ครบหรือวันที่ไม่ถูกต้อง', text: 'กรุณากรอกวันที่และเหตุผลให้ถูกต้องตามเงื่อนไข' })
+    return
+  }
 
   submitting.value = true
   try{
+    const toVal = to.value || from.value
     for (const d of eachDate(from.value, toVal)) {
-      await api.post('/api/notetakers/leave', { date: d, reason: reason.value })
+      await api.post('/api/notetakers/leave', {
+        date: d,
+        reason: reason.value,
+        emergency: !!isEmergency.value,
+        affectedTasks: isEmergency.value ? selectedTasks.value : undefined
+      })
     }
-    from.value = ''; to.value = ''; reason.value = ''
+    from.value = ''; to.value = ''; reason.value = ''; isEmergency.value = false
+    tasksToday.value = []; selectedTasks.value = []
     await load()
     Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ส่งคำลาแล้ว', timer:1400, showConfirmButton:false })
   } catch(e){
     console.error('submit leave', e)
     fetchError.value = e?.response?.data?.error || e.message || 'submit failed'
-    alert('ส่งไม่สำเร็จ')
+    await Swal.fire({ icon:'error', title:'ส่งไม่สำเร็จ', text: fetchError.value })
   } finally {
     submitting.value = false
   }
 }
 
+async function fetchTodayTasks(){
+  tasksLoading.value = true
+  tasksToday.value = []
+  selectedTasks.value = []
+  try {
+    // placeholder endpoint - adjust if backend differs
+    const res = await api.get('/api/notetakers/tasks', { params: { date: todayISO.value } })
+    const items = res?.data?.items ?? res?.data ?? []
+    tasksToday.value = Array.isArray(items) ? items : []
+  } catch (e) {
+    console.warn('fetchTodayTasks', e)
+    tasksToday.value = []
+  } finally {
+    tasksLoading.value = false
+  }
+}
+
+// when emergency toggled on, load today's tasks automatically
+watch(isEmergency, (v) => {
+  if (v) fetchTodayTasks()
+  else {
+    tasksToday.value = []
+    selectedTasks.value = []
+  }
+})
+
 async function cancelLeave(dateIso){
-  const ok = await Swal.fire({ title:'ยกเลิกการลาวันนี้?', text: dateIso, icon:'warning', showCancelButton:true, confirmButtonText:'ยืนยัน' })
+  const ok = await Swal.fire({
+    title: 'ยกเลิกการลาวันนี้?',
+    text: dateIso,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'ยืนยัน'
+  })
   if (!ok.isConfirmed) return
-  try{
-    await api.delete('/api/notetakers/leave', { params: { date: dateIso } })
+
+  try {
+    // normalize to YYYY-MM-DD because backend expects date only (no time)
+    let dateParam = dateIso
+    const dt = new Date(dateIso)
+    if (!Number.isNaN(dt.getTime())) {
+      dateParam = yyyy_mm_dd(dt)
+    }
+
+    await api.delete('/api/notetakers/leave', { params: { date: dateParam } })
     await load()
-    Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ยกเลิกแล้ว', timer:1200, showConfirmButton:false })
-  }catch(e){
-    Swal.fire({ icon:'error', title:'ไม่สำเร็จ', text: e?.response?.data?.error || e.message })
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'ยกเลิกแล้ว', timer: 1200, showConfirmButton: false })
+  } catch (e) {
+    console.error('cancelLeave', e)
+    const msg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'ไม่สำเร็จ'
+    Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ', text: msg })
   }
 }
 
