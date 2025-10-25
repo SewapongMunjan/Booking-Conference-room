@@ -542,7 +542,7 @@ function resolveRouteByNotif (n) {
   const refType = n?.refType
   const refId = n?.refId
   switch (refType) {
-    case 'BOOKING': return refId ? { path: `/booking/${refId}` } : { path: '/booking-list' }
+    case 'BOOKING': return refId ? { path: `/booking-info/${refId}` } : { path: '/booking-list' }
     case 'ISSUE': return { path: '/report', query: refId ? { issueId: String(refId) } : {} }
     case 'INVITE': return { path: '/my-invites' }
     default: return { path: '/home' }

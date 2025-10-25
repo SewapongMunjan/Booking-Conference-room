@@ -245,4 +245,59 @@ router.patch("/tasks/:id/assign", auth, requireHousekeepingLead, async (req, res
   res.json({ ok: true, item });
 });
 
+/**
+ * POST /api/housekeeping/assign
+ * body: { bookingId: number, userId: number }
+ */
+router.post("/assign", auth, async (req, res) => {
+  try {
+    const bookingId = Number(req.body?.bookingId);
+    const userId = Number(req.body?.userId);
+    const actorId = (req as any).user?.id || (req as any).userId;
+
+    if (!bookingId || !userId) {
+      return res.status(400).json({ error: "BAD_REQUEST", message: "bookingId/userId required" });
+    }
+
+    // 1) booking ต้องมีอยู่
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, startTime: true, endTime: true }
+    });
+    if (!booking) return res.status(404).json({ error: "BOOKING_NOT_FOUND" });
+
+    // 2) user ต้องเป็น “แม่บ้าน”
+    const hk = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, position: { select: { isHousekeeper: true } } }
+    });
+    if (!hk || !hk.position?.isHousekeeper) {
+      return res.status(400).json({ error: "USER_NOT_HOUSEKEEPER" });
+    }
+
+    // 3) กันซ้ำ (คนเดิมใน booking เดิม)
+    const dup = await (prisma as any).housekeepingAssignment.findFirst({
+      where: { bookingId, userId },
+      select: { id: true }
+    });
+    if (dup) {
+      return res.status(409).json({ error: "ALREADY_ASSIGNED" });
+    }
+
+    // 4) บันทึกมอบหมาย
+    const rec = await (prisma as any).housekeepingAssignment.create({
+      data: {
+        bookingId,
+        userId,
+        assignedById: actorId ?? null
+      }
+    });
+
+    return res.json({ ok: true, assignment: rec });
+  } catch (e) {
+    console.error("housekeeping.assign failed:", e);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 export default router;

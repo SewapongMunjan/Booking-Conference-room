@@ -43,6 +43,8 @@ function toMePayload(user: any) {
   };
 }
 
+
+
 /** 🔹 POST /api/auth/login — เข้าสู่ระบบ และฝัง role flags ลงใน JWT */
 router.post("/login", async (req, res) => {
   try {

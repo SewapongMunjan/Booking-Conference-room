@@ -103,7 +103,7 @@
               <button v-if="t.status !== 'COMPLETED' && t.status !== 'done'" @click="markDone(t)" class="px-3 py-1.5 bg-green-600 text-white rounded text-sm">
                 ทำเสร็จ
               </button>
-              <button @click="toAssign(t)" class="px-3 py-1.5 border rounded text-sm">มอบหมาย</button>
+              <!-- <button @click="toAssign(t)" class="px-3 py-1.5 border rounded text-sm">มอบหมาย</button> -->
             </div>
           </div>
         </div>
@@ -141,7 +141,6 @@ const statusTabs = [
 const sidebarItems = [
   { to: '/housekeeping/dashboard', label: 'Dashboard', icon: '🏠' },
   { to: '/housekeeping/tasks', label: 'งานทั้งหมด', icon: '🧾' },
-  { to: '/housekeeping/assign', label: 'มอบหมาย', icon: '👥' },
 ]
 
 function isActive(item) {
@@ -316,6 +315,7 @@ async function markDone(task) {
     await api.post(`/api/housekeeping/update/${task.id}`, { status: 'COMPLETED' })
     task.status = 'COMPLETED'
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'ทำเสร็จแล้ว', timer: 1500, showConfirmButton: false })
+    localStorage.setItem('hk:task-updated', String(Date.now()));
   } catch (e) {
     console.error('markDone', e)
     Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: e?.response?.data?.error || e?.message || 'อัปเดตสถานะไม่สำเร็จ' })

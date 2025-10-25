@@ -223,42 +223,96 @@ router.get("/assignments", auth, requireNoteRole, async (req, res) => {
 /* ========== รายชื่อคนจดที่ “พร้อม” ให้เลือกแทน ==========
  * GET /api/notetakers/candidates?start=ISO&end=ISO&excludeIds=1,2
  */
-router.get("/candidates", auth, requireNoteRole, async (req, res) => {
+router.get("/candidates", auth, async (req, res) => {
   try {
+    // mode: 'note' (ค่าเริ่มต้น) หรือ 'housekeeper'
+    const mode = String(req.query.mode || 'note').toLowerCase();
+
     const start = new Date(String(req.query.start));
     const end = new Date(String(req.query.end));
     if (isNaN(start as any) || isNaN(end as any)) {
       return res.status(400).json({ error: "BAD_TIME_RANGE" });
     }
+
     const excludeIds = String(req.query.excludeIds || "")
       .split(",")
       .map((x) => Number(x.trim()))
       .filter(Boolean);
 
-    const q = await prisma.noteTakerQueue.findMany({
-      where: { isActive: true, user: { position: { isNoteTaker: true } } },
-      orderBy: { orderNo: "asc" },
-      select: {
-        userId: true,
-        orderNo: true,
-        user: { select: { id: true, fullName: true } },
-      },
-    });
-
     const day = atDate(start);
-    const ready: any[] = [];
-    for (const c of q) {
-      if (excludeIds.includes(c.userId)) continue;
-      if (await isOnLeaveDate(prisma, c.userId, day)) continue;
-      if (await isNoteTakerBusy(prisma, c.userId, start, end)) continue;
-      ready.push(c);
+
+    // ---------- โหมดเดิม: ผู้จด ----------
+    if (mode === 'note') {
+      // **เดิม** requireNoteRole -> ย้ายออกจาก middleware ให้ endpoint ใช้งานร่วมกันได้
+      const q = await prisma.noteTakerQueue.findMany({
+        where: {
+          isActive: true,
+          user: { position: { isNoteTaker: true } },
+        },
+        orderBy: { orderNo: "asc" },
+        select: {
+          userId: true,
+          orderNo: true,
+          user: { select: { id: true, fullName: true, position: true } }, // include position เพื่อให้ FE ใช้ได้
+        },
+      });
+
+      const ready: any[] = [];
+      for (const c of q) {
+        if (excludeIds.includes(c.userId)) continue;
+        if (await isOnLeaveDate(prisma, c.userId, day)) continue;
+        if (await isNoteTakerBusy(prisma, c.userId, start, end)) continue;
+        ready.push(c);
+      }
+      return res.json({ items: ready });
     }
-    res.json({ items: ready });
+
+    // ---------- โหมดใหม่: แม่บ้าน ----------
+    if (mode === 'housekeeper') {
+      // ดึง "ผู้ใช้ที่มีตำแหน่งเป็นแม่บ้าน" ทั้งหมด (ไม่ใช้คิว)
+      const users = await prisma.user.findMany({
+        where: {
+          id: { notIn: excludeIds.length ? excludeIds : undefined },
+          position: { isHousekeeper: true },
+          // ถ้ามีฟิลด์สถานะผู้ใช้ เช่น isActive ให้ใส่เพิ่มได้
+          // isActive: true
+        },
+        include: {
+          position: true, // << สำคัญ: เพื่อให้ FE มองเห็นว่าเป็นแม่บ้านจริง
+        },
+        orderBy: { fullName: "asc" },
+      });
+
+      const ready: any[] = [];
+      for (const u of users) {
+        const uid = Number(u.id);
+        if (await isOnLeaveDate(prisma, uid, day)) continue;
+
+        // ถ้ามีฟังก์ชันเช็คงานแม่บ้านซ้อนเวลา ให้เรียกที่นี่ (เช่น isHousekeeperBusy)
+        // ตอนนี้ปล่อยผ่านเฉพาะเช็ควันลา เพื่อความง่าย/เร็ว
+        // if (await isHousekeeperBusy(prisma, uid, start, end)) continue;
+
+        ready.push({
+          userId: uid,
+          orderNo: null, // ไม่มีคิว จึงใส่ null ไว้ให้โครงสร้างสอดคล้องของ FE
+          user: {
+            id: uid,
+            fullName: u.fullName,
+            position: u.position, // FE จะสามารถอ่าน u.position.isHousekeeper ได้
+          },
+        });
+      }
+      return res.json({ items: ready });
+    }
+
+    // mode ไม่ถูกต้อง
+    return res.status(400).json({ error: "BAD_MODE" });
   } catch (e) {
     console.error("candidates failed:", e);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 /* ========== ผู้จดกด “ลากะทันหัน/กลับมาว่าง” ==========
  * PATCH /api/notetakers/availability/unavailable { bookingId }
@@ -372,18 +426,43 @@ router.delete("/leave", auth, requireNoteRole, async (req: any, res) => {
  */
 router.get("/leaves/pending", auth, requireNoteManagerOrAdmin, async (req, res) => {
   try {
-    const dateStr = String(req.query?.date || "");
-    const base = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? atDate(dateStr) : atDate(new Date());
-    const start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 0, 0, 0);
-    const end   = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
+    const wantAll = String(req.query?.all || "") === "1";
+    const days = Math.min(Math.max(Number(req.query?.days || 30), 1), 90);
 
+    let start: Date, end: Date;
+
+    if (wantAll) {
+      const base = atDate(new Date());
+      start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 0, 0, 0);
+      end = new Date(start);
+      end.setDate(end.getDate() + days);
+      end.setHours(23, 59, 59, 999);
+    } else {
+      const dateStr = String(req.query?.date || "");
+      const base = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? atDate(dateStr) : atDate(new Date());
+      start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 0, 0, 0);
+      end   = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59, 999);
+    }
+
+    // ดึงวันลาของผู้จดในช่วงที่สนใจทั้งหมด
     const leaves = await (prisma as any).noteTakerLeave.findMany({
-      where: { date: start as any },
-      select: { userId: true },
+      where: wantAll
+        ? { date: { gte: start as any, lte: atDate(end) as any } }
+        : { date: start as any },
+      select: { userId: true, date: true },
     });
-    const leaveIds = new Set<number>(leaves.map((x: any) => x.userId));
-    if (leaveIds.size === 0) return res.json({ items: [] });
 
+    if (leaves.length === 0) return res.json({ items: [] });
+
+    // map วัน -> ชุด userId ที่ลาในวันนั้น
+    const leaveMap = new Map<number, Set<number>>();
+    for (const lv of leaves) {
+      const d = atDate(lv.date as any).getTime();
+      if (!leaveMap.has(d)) leaveMap.set(d, new Set<number>());
+      leaveMap.get(d)!.add(lv.userId);
+    }
+
+    // ดึง booking ที่ทับช่วงเวลา
     const bookings = await prisma.booking.findMany({
       where: {
         status: { not: BookingStatus.CANCELLED },
@@ -402,25 +481,33 @@ router.get("/leaves/pending", auth, requireNoteManagerOrAdmin, async (req, res) 
 
     const items = bookings
       .map(b => {
+        // match วันลาแบบ “ตามวันที่เริ่มประชุม” (ปรับได้ตามที่ต้องการ)
+        const key = atDate(b.startTime).getTime();
+        const leaveIds = leaveMap.get(key);
+        if (!leaveIds || leaveIds.size === 0) return null;
+
         const affected = (b.noteTakers || []).filter(nt =>
           leaveIds.has(nt.userId) &&
-          [NoteQueueStatus.ACCEPTED, NoteQueueStatus.INVITED].includes(nt.status as any)
+          (nt.status === "ACCEPTED" || nt.status === "INVITED")
         );
-        const unavailableUsers = affected.map((nt) => ({
+
+        if (affected.length === 0) return null;
+
+        const unavailableUsers = affected.map(nt => ({
           id: nt.user?.id ?? nt.userId,
           fullName: nt.user?.fullName ?? "(ไม่ทราบชื่อ)",
           status: nt.status,
         }));
-        const needsReplacement = unavailableUsers.length > 0;
-        return needsReplacement ? {
+
+        return {
           id: b.id,
           room: b.room,
           startTime: b.startTime,
           endTime: b.endTime,
           noteTakers: b.noteTakers,
           unavailableUsers,
-          needsReplacement,
-        } : null;
+          needsReplacement: unavailableUsers.length > 0,
+        };
       })
       .filter(Boolean);
 
@@ -430,6 +517,8 @@ router.get("/leaves/pending", auth, requireNoteManagerOrAdmin, async (req, res) 
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+
 
 /* ========== เลือกคนแทน ==========
  * POST /api/notetakers/substitute  { bookingId, forUserId, substituteUserId }

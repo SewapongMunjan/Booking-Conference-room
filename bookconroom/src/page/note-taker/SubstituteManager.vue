@@ -150,22 +150,8 @@ const selectedTaker = ref('')
 const assigning = ref(false)
 
 // ===== computed / helpers =====
-const filtered = computed(() => {
-  const kw = q.value.trim().toLowerCase()
-  let arr = Array.isArray(requests.value) ? requests.value : []
-  if (!kw) return arr
-  return arr.filter(s =>
-    (s.room?.roomName || '').toLowerCase().includes(kw) ||
-    (s.unavailableUsers || []).some(u => (u.fullName || '').toLowerCase().includes(kw))
-  )
-})
-
-const takers = computed(() =>
-  (candidates.value || []).map(c => ({
-    id: c.userId,                                 // API คืน userId
-    name: c.user?.fullName || `User #${c.userId}`, // แปลงเป็นชื่อ
-  }))
-)
+ //แสดงทุกงานที่ต้องหา “ผู้จดแทน” ตั้งแต่แรก (ไม่ฟิลเตอร์ด้วย q)
+const filtered = computed(() => Array.isArray(requests.value) ? requests.value : [])
 
 function timeRange(s,e){
   if(!s||!e) return '-'
@@ -175,12 +161,11 @@ function timeRange(s,e){
 function toISO(d){ return new Date(d).toISOString() }
 
 // ===== API =====
-async function load(dateStr) {
+async function loadAll() {
   loading.value = true
   fetchError.value = ''
   try {
-    const params = dateStr ? { date: dateStr } : {}
-    const { data } = await api.get('/api/notetakers/leaves/pending', { params })
+    const { data } = await api.get('/api/notetakers/leaves/pending', { params: { all: 1, days: 30 } })
     requests.value = Array.isArray(data?.items) ? data.items : []
     try { const u = await api.get('/api/me'); me.value = u.data || me.value } catch (_) {}
   } catch (e) {
@@ -191,9 +176,7 @@ async function load(dateStr) {
   }
 }
 
-function onChangeDate(){
-  load(selectedDate.value)
-}
+function onChangeDate(){ /* โหมด all: ไม่ต้องทำอะไรแล้ว หรือจะเรียก loadAll() เพื่อรีเฟรชก็ได้ */ }
 
 async function loadCandidates(startIso, endIso, excludeIds = []) {
   candidateError.value = ''
@@ -256,7 +239,7 @@ async function logout() {
 }
 
 onMounted(() => {
-  load(selectedDate.value) // โหลดตามวันที่เลือก (เริ่มต้น = วันนี้)
+  loadAll() // โหลดทุกรายการ (all mode)
 })
 </script>
 

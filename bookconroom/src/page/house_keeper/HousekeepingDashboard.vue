@@ -116,9 +116,23 @@
                         งาน: <span class="font-medium">{{ room.tasks.length }}</span>
                       </div>
                     </div>
+
                     <div class="text-right">
                       <div class="text-xs text-gray-400">{{ room.location || '' }}</div>
-                      <button @click="openAssign(room)" class="mt-2 px-3 py-1 bg-emerald-600 text-white rounded text-sm">มอบหมาย</button>
+
+                      <!-- ถ้าทุกงานเสร็จ -> โชว์ป้าย / ถ้ายังมีงานค้าง -> โชว์ปุ่ม -->
+                      <span
+                        v-if="isRoomDone(room)"
+                        class="inline-block mt-2 px-2 py-1 rounded-full bg-green-50 text-green-700 text-xs"
+                      >
+                        เสร็จสิ้นแล้ว
+                      </span>
+                      <button
+                        v-else
+                        @click="markRoomDone(room)"
+                        class="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm">
+                        ทำเสร็จ
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -210,14 +224,13 @@ const urgentTasks = computed(() => {
     if (!r._start) return
     const diff = r._start - now
     if (diff > 0 && diff <= within) {
-      // ดึงงานในห้องนั้นมาถือเป็น "งานด่วน"
       (r.tasks || []).forEach(t => list.push({ ...t, roomName: r.name }))
     }
   })
   return list
 })
 
-// รวมบริการทั้งหมด พร้อมจำนวนที่แนะนำ = จำนวนผู้เข้าร่วมยืนยัน
+// รวมบริการทั้งหมด พร้อมจำนวนแนะนำ = จำนวนผู้ยืนยัน
 const equipSummary = computed(() => {
   const agg = new Map()
   for (const r of rooms.value) {
@@ -249,7 +262,6 @@ function fmtRange(startISO, endISO){
 // เติมจำนวนผู้ยืนยัน/เชิญทั้งหมด จาก /api/bookings/:id
 async function hydrateAttendeeCounts(list){
   const unique = Array.from(new Set(list.map(x => x.bookingId).filter(Boolean)))
-  // ทำทีละชุด เพื่อไม่ยิงถี่เกินไป
   const batches = []
   const copy = unique.slice()
   while (copy.length) batches.push(copy.splice(0, 8))
@@ -259,40 +271,33 @@ async function hydrateAttendeeCounts(list){
       try{
         const { data } = await api.get(`/api/bookings/${id}`)
         const bk = data?.booking
-        if (!bk) { map.set(id, { confirmed: 0, invitedTotal: 0 }); return }
+        if (!bk) { map.set(id, { confirmed: 0, invitedTotal: 0, services: [] }); return }
         const acceptedInvites = (bk.invites || []).filter(v=>v.status==='ACCEPTED').length
         const acceptedNoteTakers = (bk.noteTakers || []).filter(v=>v.status==='ACCEPTED').length
         const organizer = bk.bookedBy ? 1 : 0
-         const serviceNames = (bk.services || [])
-          // .filter(bs => bs.service?.category === 'HOUSEKEEPING')
-          .map(bs => bs.service?.name)
-          .filter(Boolean)
+        const serviceNames = (bk.services || []).map(bs => bs.service?.name).filter(Boolean)
         map.set(id, {
           confirmed: acceptedInvites + acceptedNoteTakers + organizer,
           invitedTotal: (bk.invites || []).length + acceptedNoteTakers + organizer,
           services: Array.from(new Set(serviceNames)),
         })
       }catch{
-        map.set(id, { confirmed: 0, invitedTotal: 0 })
+        map.set(id, { confirmed: 0, invitedTotal: 0, services: [] })
       }
     }))
   }
-  // เติมกลับเข้า list
   list.forEach(r => {
     const v = map.get(r.bookingId) || { confirmed: 0, invitedTotal: 0, services: [] }
     r.confirmed = v.confirmed
     r.invitedTotal = v.invitedTotal
-    // ถ้าเดิมมี services จาก endpoint housekeeping ก็รวมกันแบบไม่ซ้ำ
     const existing = Array.isArray(r.services) ? r.services : []
     r.services = Array.from(new Set([ ...existing, ...v.services ]))
   })
 }
 
 async function loadFromHousekeeping(){
-  // ข้อมูลที่ backend ส่งมาจาก /api/housekeeping/tasks
   const { data } = await api.get('/api/housekeeping/tasks')
   const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
-  // ปรับรูปแบบเป็นห้อง
   const result = items.map(it => ({
     id: it.room?.id ?? it.roomId ?? `room-${it.bookingId ?? it.id}`,
     bookingId: it.bookingId,
@@ -301,10 +306,17 @@ async function loadFromHousekeeping(){
     services: (it.services || []).map(s => s.name || s),
     timeRange: fmtRange(it.startTime, it.endTime),
     _start: new Date(it.startTime).getTime(),
-    tasks: it.tasks || [], // ถ้ามี
+    tasks: it.tasks || [],
   }))
   await hydrateAttendeeCounts(result)
   rooms.value = result
+
+  // ⚠️ เคลียร์ธง "เสร็จแล้ว" ถ้ายังพบว่ายังมีงานค้างจริงจาก API
+  rooms.value.forEach(r => {
+    const list = Array.isArray(r.tasks) ? r.tasks : []
+    const stillOpen = list.some(t => !['COMPLETED','DONE'].includes(String(t.status).toUpperCase()))
+    if (stillOpen) localStorage.removeItem(`hk:room-done:${r.bookingId}`)
+  })
 }
 
 async function loadAll(){
@@ -314,7 +326,6 @@ async function loadAll(){
     await loadFromHousekeeping()
   }catch(e){
     console.warn('fallback bookings list', e?.response?.status || e?.message)
-    // fallback: ลองดึงจาก /api/bookings ถ้า endpoint housekeeping ไม่มี
     try{
       const today = new Date()
       const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
@@ -333,6 +344,7 @@ async function loadAll(){
       }))
       await hydrateAttendeeCounts(mapped)
       rooms.value = mapped
+      // fallback ไม่มี tasks -> ไม่แตะธง ให้ใช้ค่าที่เคยตั้งไว้
     }catch(err){
       console.error('[HousekeepingDashboard] load error', err)
       error.value = err?.response?.data?.error || err?.message || 'โหลดข้อมูลล้มเหลว'
@@ -344,6 +356,15 @@ async function loadAll(){
 }
 
 /* ===== Actions ===== */
+function isRoomDone(room) {
+  const list = Array.isArray(room.tasks) ? room.tasks : []
+  if (list.length > 0) {
+    return list.every(t => ['COMPLETED','DONE'].includes(String(t.status).toUpperCase()))
+  }
+  // กรณีไม่มี tasks ให้ดูจากธงที่ตั้งไว้ตอนกด "ทำเสร็จ"
+  return localStorage.getItem(`hk:room-done:${room.bookingId}`) === '1'
+}
+
 async function markDone(task){
   if (!task?.id) return
   const confirm = await Swal.fire({
@@ -359,6 +380,8 @@ async function markDone(task){
   try {
     await api.post(`/api/housekeeping/update/${task.id}`, { status: 'COMPLETED' })
     task.status = 'COMPLETED'
+    localStorage.setItem('hk:task-updated', String(Date.now()))
+    await loadAll()
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'อัปเดตเรียบร้อย', timer: 1500, showConfirmButton: false })
   } catch (e) {
     console.error('markDone', e)
@@ -366,8 +389,42 @@ async function markDone(task){
   }
 }
 
-function openAssign(room){
-  router.push({ path: '/housekeeping/assign', query: { roomId: room.id, bookingId: room.bookingId } })
+async function markRoomDone(room){
+  const list = Array.isArray(room?.tasks) ? room.tasks : []
+  if (list.length === 0) {
+    await Swal.fire({ icon: 'info', title: 'ไม่มีงานในห้องนี้', text: 'ยังไม่มีรายการงานให้ทำเสร็จ' })
+    return
+  }
+
+  const confirm = await Swal.fire({
+    title: 'ยืนยัน',
+    html: `ต้องการทำงานทั้งหมดของ <b>${room.name || 'ห้องนี้'}</b> ให้เสร็จหรือไม่?`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'ใช่, ทำเสร็จทั้งหมด',
+    cancelButtonText: 'ยกเลิก'
+  })
+  if (!confirm.isConfirmed) return
+
+  try {
+    await Promise.all(
+      list
+        .filter(t => t?.id && !['COMPLETED','DONE'].includes(String(t.status).toUpperCase()))
+        .map(t => api.post(`/api/housekeeping/update/${t.id}`, { status: 'COMPLETED' }))
+    )
+
+    // ตั้งธงให้ห้องนี้เป็น "เสร็จแล้ว" (ใช้ในกรณีหน้าอื่นไม่ส่ง tasks กลับมา)
+    localStorage.setItem(`hk:room-done:${room.bookingId}`, '1')
+
+    // แจ้งแท็บอื่นและรีโหลด
+    localStorage.setItem('hk:task-updated', String(Date.now()))
+    await loadAll()
+
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'อัปเดตเรียบร้อย', timer: 1500, showConfirmButton: false })
+  } catch (e) {
+    console.error('markRoomDone', e)
+    Swal.fire({ icon: 'error', title: 'อัปเดตไม่สำเร็จ', text: e?.response?.data?.error || e?.message || 'เกิดข้อผิดพลาด' })
+  }
 }
 
 function logout(){
@@ -380,19 +437,34 @@ function logout(){
 const sidebarItems = [
   { to: '/housekeeping/dashboard', label: 'Dashboard', icon: '🏠' },
   { to: '/housekeeping/tasks',     label: 'งานทั้งหมด', icon: '🧾' },
-  { to: '/housekeeping/assign',    label: 'มอบหมาย',   icon: '👥' },
 ]
 function isActive(item) {
   try { return route.path === item.to || route.path.startsWith(item.to) } catch { return false }
+}
+
+/* === Live refresh hooks (จากแท็บอื่น/เปลี่ยนโฟกัส) === */
+function onStorage(e) {
+  if (e.key === 'hk:task-updated') loadAll()
+}
+function onVisibility() {
+  if (!document.hidden) loadAll()
 }
 
 /* ===== Mount ===== */
 onMounted(async () => {
   await fetchMe()
   await loadAll()
+  // tick ทุก 1 นาที
   timer.value = setInterval(loadAll, 60_000)
+  // ฟังสัญญาณจากแท็บอื่น + โฟกัสกลับมา
+  window.addEventListener('storage', onStorage)
+  document.addEventListener('visibilitychange', onVisibility)
 })
-onUnmounted(() => { if (timer.value) clearInterval(timer.value) })
+onUnmounted(() => {
+  if (timer.value) clearInterval(timer.value)
+  window.removeEventListener('storage', onStorage)
+  document.removeEventListener('visibilitychange', onVisibility)
+})
 </script>
 
 <style scoped>

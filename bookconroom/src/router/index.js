@@ -44,6 +44,7 @@ const routes = [
   // user routes
   { path: '/home', component: Home, meta: { requiresAuth: true } },
   { path: '/booking', component: Booking, meta: { requiresAuth: true } },
+  { path: '/booking-info', redirect: '/booking-list' },
   { path: '/booking-info/:id', component: BookingInfo, meta: { requiresAuth: true } },
   { path: '/booking-list', component: BookingList, meta: { requiresAuth: true } },
   { path: '/booking-complete', component: BookCompleteInfo, meta: { requiresAuth: true } },
@@ -156,7 +157,7 @@ router.beforeEach((to, from, next) => {
 
   if (admin)       return next('/admin/dashboard-modern')
   if (noteManager) return next('/note-taker/dashboard')
-  if (notetaker)   return next('/note-taker/my-queue')
+  if (noteTaker)   return next('/note-taker/my-queue')
   if (housekeeper) return next('/housekeeping/dashboard')
   return next('/home')
 }

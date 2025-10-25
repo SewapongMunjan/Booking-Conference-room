@@ -754,7 +754,9 @@ function serviceBadge (status) {
 
 /** ===== data drive ===== */
 const bookingId = computed(() => {
-  return route.params.id || route.query.focusId || null
+   const raw = route.params.id ?? route.query.focusId
+   const n = Number(raw)
+   return Number.isFinite(n) && n > 0 ? n : null
 })
 
 const isBooker = computed(() => {
@@ -795,6 +797,8 @@ async function fetchBooking () {
   try {
     if (!bookingId.value) {
       error.value = 'ไม่พบรหัสการจอง โปรดกลับไปเลือกรายการ'
+      // กันผู้ใช้ค้างหน้าว่าง
+     router.replace('/booking-list')  // กันค้างหน้าว่าง
       return
     }
     const { data } = await api.get(`/api/bookings/${bookingId.value}`)

@@ -12,7 +12,7 @@ import {
   RefType,
 } from "@prisma/client";
 
-
+/** ---------- Utilities ---------- */
 function renderBookingHtml(data: any): string {
   const attendeesHtml =
     (data.attendees || [])
@@ -58,10 +58,59 @@ function renderBookingHtml(data: any): string {
 }
 
 async function htmlToPdfBuffer(html: string, _opts?: any): Promise<Buffer> {
+  // NOTE: ตัวอย่าง mock; ถ้ามี lib สร้าง PDF จริง ให้แทนที่ส่วนนี้
   return Buffer.from(html, "utf-8");
 }
 
+/** ตรวจว่า req.params.id เป็น "เลขล้วน" ไม่ใช่ NaN/undefined/คำอื่น ๆ */
+function parseNumericIdParam(req: any, res: any): number | null {
+  const raw = req.params?.id;
+  if (!raw || !/^\d+$/.test(String(raw))) {
+    res.status(400).json({ error: "Invalid or missing booking ID" });
+    return null;
+  }
+  return Number(raw);
+}
+
+/** ========= Thai time helpers (UTC+7) =========
+ * Thailand ไม่มี DST → ใช้ offset คงที่ +07:00 ได้ปลอดภัย
+ */
+const TH_OFFSET = "+07:00";
+
+/** สร้าง Date จากสตริงที่ตีความเป็นเวลาไทย แล้วแปลงเป็น UTC Instant */
+function dateFromThaiLocal(isoLocalLike: string): Date | null {
+  if (!isoLocalLike) return null;
+  // รับได้ทั้ง "YYYY-MM-DD" หรือ "YYYY-MM-DDTHH:mm[:ss]"
+  // ถ้าให้มาแค่วันที่ → เติมเวลา 00:00
+  const hasTime = isoLocalLike.includes("T");
+  const base = hasTime ? isoLocalLike : `${isoLocalLike}T00:00:00`;
+  // เติม offset +07:00 ให้เป็น RFC3339
+  const withOffset = `${base}${TH_OFFSET}`;
+  const d = new Date(withOffset);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** start ของทั้งวันไทย (00:00 ไทย) ในรูป UTC Instant */
+function startOfThaiDay(dateStr: string): Date | null {
+  return dateFromThaiLocal(`${dateStr}T00:00:00`);
+}
+
+/** end ของทั้งวันไทย (ถนัดใช้แบบ nextDayStart - 1ms) */
+function endOfThaiDayExclusive(dateStr: string): Date | null {
+  const next = dateFromThaiLocal(`${dateStr}T00:00:00`);
+  if (!next) return null;
+  // next day start (ไทย)
+  const js = new Date(next.getTime() + 24 * 60 * 60 * 1000);
+  return js;
+}
+
 const router = Router();
+
+/** (Debug) Logger — เอาไว้วิเคราะห์ว่า endpoint ไหนโดนเรียก */
+router.use((req, _res, next) => {
+  console.log("[BOOKINGS]", req.method, req.originalUrl);
+  next();
+});
 
 /** ===== Helper: ตรวจชนเวลาห้อง (มี option ข้าม bookingId เดิม เพื่อใช้ตอน approve) */
 async function isRoomTimeBlocked(
@@ -83,7 +132,7 @@ async function isRoomTimeBlocked(
       ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
       OR: [
         { startTime: { gte: start, lt: end } }, // เริ่มภายในช่วง
-        { endTime: { gt: start, lte: end } }, // สิ้นสุดภายในช่วง
+        { endTime: { gt: start, lte: end } },   // สิ้นสุดภายในช่วง
         { AND: [{ startTime: { lte: start } }, { endTime: { gte: end } }] }, // ครอบคลุมทั้งช่วง
       ],
     },
@@ -154,7 +203,7 @@ router.post("/", auth, async (req: any, res) => {
       roomId,
       startTime,
       endTime,
-      agendaUrl, // เผื่ออนาคต (ยังไม่เก็บ DB)
+      agendaUrl,
       requiredPositionIds = [],
       serviceIds = [],
     } = req.body as {
@@ -186,9 +235,7 @@ router.post("/", auth, async (req: any, res) => {
       return res.status(409).json({ error: "Room is not available in the selected time range" });
     }
 
-    // ทำทุกอย่างในทรานแซกชัน
     const created = await prisma.$transaction(async (tx) => {
-      // (1) booking
       const booking = await tx.booking.create({
         data: {
           roomId: room.id,
@@ -199,7 +246,6 @@ router.post("/", auth, async (req: any, res) => {
         },
       });
 
-      // (2) required positions
       if (requiredPositionIds.length > 0) {
         await tx.bookingRequiredPosition.createMany({
           data: requiredPositionIds.map((pid) => ({
@@ -210,7 +256,6 @@ router.post("/", auth, async (req: any, res) => {
         });
       }
 
-      // (3) services
       if (serviceIds.length > 0) {
         await tx.bookingService.createMany({
           data: serviceIds.map((sid) => ({
@@ -222,7 +267,6 @@ router.post("/", auth, async (req: any, res) => {
         });
       }
 
-      // (4) invites: พนักงานทั้งหมดในตำแหน่งที่ถูกเลือก
       if (requiredPositionIds.length > 0) {
         const attendees = await tx.user.findMany({
           where: { positionId: { in: requiredPositionIds.map(Number) } },
@@ -249,7 +293,6 @@ router.post("/", auth, async (req: any, res) => {
         }
       }
 
-      // (5) เลือก NoteTaker 2 คนจากคิว (auto-accept) แล้วหมุนคิวไปท้าย
       const notetakers = await tx.noteTakerQueue.findMany({
         where: { isActive: true },
         orderBy: { orderNo: "asc" },
@@ -258,7 +301,6 @@ router.post("/", auth, async (req: any, res) => {
       });
 
       if (notetakers.length > 0) {
-        // 5A) บันทึกผู้จดประชุม (ACCEPTED)
         await tx.bookingNoteTaker.createMany({
           data: notetakers.map((n, idx) => ({
             bookingId: booking.id,
@@ -269,7 +311,6 @@ router.post("/", auth, async (req: any, res) => {
           skipDuplicates: true,
         });
 
-        // 5B) สร้าง invite ให้และ set ACCEPTED
         await tx.bookingInvite.createMany({
           data: notetakers.map((n) => ({
             bookingId: booking.id,
@@ -279,7 +320,6 @@ router.post("/", auth, async (req: any, res) => {
           skipDuplicates: true,
         });
 
-        // 5C) แจ้งผู้ถูกมอบหมาย
         await notifyMany(tx, notetakers.map((n) => n.userId), {
           type: NotifType.INVITE,
           title: "มอบหมายให้จดประชุม",
@@ -288,7 +328,6 @@ router.post("/", auth, async (req: any, res) => {
           refId: booking.id,
         });
 
-        // 5D) หมุนคิวไปท้าย
         const maxOrder = await tx.noteTakerQueue.aggregate({
           _max: { orderNo: true },
           where: { isActive: true },
@@ -305,7 +344,6 @@ router.post("/", auth, async (req: any, res) => {
       return booking;
     });
 
-    // ✅ ดึงกลับพร้อม relations ที่ UI ต้องใช้ (รวม services.service)
     const full = await prisma.booking.findUnique({
       where: { id: created.id },
       include: {
@@ -314,7 +352,7 @@ router.post("/", auth, async (req: any, res) => {
         requiredPositions: { include: { position: true } },
         invites: { include: { user: { select: { id: true, fullName: true } } } },
         noteTakers: { include: { user: { select: { id: true, fullName: true } } } },
-        services: { include: { service: true } }, // สำคัญสำหรับ Housekeeping/IT
+        services: { include: { service: true } },
       },
     });
 
@@ -325,25 +363,33 @@ router.post("/", auth, async (req: any, res) => {
   }
 });
 
-
 /** ====== LIST BOOKINGS ======
- * GET /api/bookings?mine=1&status=APPROVED&status_not=CANCELLED&status_in=A,B&start=ISO&end=ISO&start_gte=ISO&roomId=1&withInviteStats=1&page=1&pageSize=20
+ * GET /api/bookings
+ * พารามิเตอร์ (เลือกใช้):
+ * - มาตรฐาน: mine, status, status_not, status_in, start, end, start_gte, roomId, withInviteStats, page, pageSize
+ * - แบบวันไทย (UTC+7): date_th=YYYY-MM-DD, from_th=YYYY-MM-DD, to_th=YYYY-MM-DD, start_gte_th=YYYY-MM-DD[THH:mm]
  */
 router.get("/", auth, async (req: any, res) => {
   try {
     const userId = Number(req.user!.sub);
 
-    // ---- Query parsing ----
+    // -------- พารามิเตอร์เดิม --------
     const mine = req.query.mine === "1" || req.query.mine === "true";
     const status = (req.query.status as string) || undefined;
-    const status_not = (req.query.status_not as string) || undefined; // NEW
-    const status_in = (req.query.status_in as string) || undefined; // NEW (comma-separated)
+    const status_not = (req.query.status_not as string) || undefined;
+    const status_in = (req.query.status_in as string) || undefined;
     const start = (req.query.start as string) || undefined;
     const end = (req.query.end as string) || undefined;
-    const start_gte = (req.query.start_gte as string) || undefined; // NEW (สำหรับ recent)
+    const start_gte = (req.query.start_gte as string) || undefined;
+    const roomIdParam = req.query.roomId ? Number(req.query.roomId) : undefined;
     const withInviteStats =
       req.query.withInviteStats === "1" || req.query.withInviteStats === "true";
-    const roomIdParam = req.query.roomId ? Number(req.query.roomId) : undefined;
+
+    // -------- พารามิเตอร์วันไทย (ใหม่) --------
+    const date_th = (req.query.date_th as string) || undefined;          // ทั้งวันไทย
+    const from_th = (req.query.from_th as string) || undefined;          // ช่วงวันไทย (เริ่ม)
+    const to_th   = (req.query.to_th as string) || undefined;            // ช่วงวันไทย (จบ) — exclusive (วันถัดไป 00:00 ไทย)
+    const start_gte_th = (req.query.start_gte_th as string) || undefined;// เริ่มไม่ก่อนเวลานี้ (ไทย)
 
     const page = Math.max(1, parseInt((req.query.page as string) || "1", 10));
     const pageSize = Math.min(
@@ -351,13 +397,12 @@ router.get("/", auth, async (req: any, res) => {
       Math.max(1, parseInt((req.query.pageSize as string) || "20", 10))
     );
 
-    // ---- Build where ----
     const where: Prisma.BookingWhereInput = {};
 
     if (mine) where.bookedById = userId;
     if (roomIdParam) where.roomId = roomIdParam;
 
-    // สถานะ: ตามลำดับความสำคัญ -> status > status_in > status_not > default(not CANCELLED)
+    // สถานะ
     if (status) {
       where.status = status as BookingStatus;
     } else if (status_in) {
@@ -373,10 +418,40 @@ router.get("/", auth, async (req: any, res) => {
       where.status = { not: BookingStatus.CANCELLED };
     }
 
-    // เวลา:
-    // 1) หากมี start & end -> overlap ช่วง
-    // 2) หากมี start_gte อย่างเดียว -> startTime >= start_gte
-    if (start && end) {
+    // ====== กฎเวลา (ให้ priority กับแบบไทยก่อน) ======
+    // 1) date_th → ทั้งวันไทย
+    if (date_th) {
+      const s = startOfThaiDay(date_th);
+      const e = endOfThaiDayExclusive(date_th);
+      if (s && e) {
+        where.OR = [
+          { startTime: { gte: s, lt: e } },
+          { endTime: { gt: s, lte: e } },
+          { AND: [{ startTime: { lte: s } }, { endTime: { gte: e } }] },
+        ];
+      }
+    }
+    // 2) from_th + to_th → ช่วงวันไทย (to_th เป็นวันสุดท้ายแบบ exclusive)
+    else if (from_th && to_th) {
+      const s = startOfThaiDay(from_th);
+      const e = startOfThaiDay(to_th); // to_th 00:00 ไทย → exclusive
+      if (s && e) {
+        where.OR = [
+          { startTime: { gte: s, lt: e } },
+          { endTime: { gt: s, lte: e } },
+          { AND: [{ startTime: { lte: s } }, { endTime: { gte: e } }] },
+        ];
+      }
+    }
+    // 3) start_gte_th (ไทย) → startTime >= เวลานี้ (ไทย)
+    else if (start_gte_th) {
+      const s = dateFromThaiLocal(start_gte_th);
+      if (s) {
+        where.startTime = { gte: s };
+      }
+    }
+    // 4) กฎมาตรฐานเดิม
+    else if (start && end) {
       const s = new Date(start);
       const e = new Date(end);
       if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
@@ -394,7 +469,7 @@ router.get("/", auth, async (req: any, res) => {
     }
 
     const orderBy =
-      roomIdParam && (start || end)
+      roomIdParam && (date_th || (from_th && to_th) || (start && end))
         ? { startTime: "asc" as const }
         : { startTime: "desc" as const };
 
@@ -411,7 +486,7 @@ router.get("/", auth, async (req: any, res) => {
           status: true,
           createdAt: true,
           room: { select: { id: true, roomName: true, capacity: true } },
-          bookedBy: { select: { id: true, fullName: true } },
+          bookedBy: { select: { id: true, fullName: true} },
         },
       }),
       prisma.booking.count({ where }),
@@ -474,38 +549,14 @@ router.get("/my", auth, async (req: any, res) => {
   }
 });
 
-/** ====== GET DETAIL ======
- * GET /api/bookings/:id
- */
-router.get("/:id", auth, async (req: any, res) => {
-  try {
-    const id = Number(req.params.id);
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: {
-        room: true,
-        bookedBy: { select: { id: true, fullName: true } },
-        requiredPositions: { include: { position: true } },
-        invites: { include: { user: { select: { id: true, fullName: true, positionId: true } } } },
-        noteTakers: { include: { user: { select: { id: true, fullName: true } } } },
-        // ✅ เพิ่มบรรทัดนี้
-         services: { include: { service: { select: { id: true, name: true, category: true } } } },
-      },
-    });
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-    res.json({ booking });
-  } catch (e) {
-    console.error("Get booking failed:", e);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
 /** ====== INVITE: ACCEPT ======
  * POST /api/bookings/:id/confirm
  */
 router.post("/:id/confirm", auth, async (req: any, res) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseNumericIdParam(req, res);
+    if (id === null) return;
+
     const userId = Number(req.user!.sub);
 
     const invite = await prisma.bookingInvite.findFirst({
@@ -519,7 +570,6 @@ router.post("/:id/confirm", auth, async (req: any, res) => {
       data: { status: InviteStatus.ACCEPTED },
     });
 
-    // แจ้งผู้จองว่ามีคนยืนยัน
     const b = await prisma.booking.findUnique({
       where: { id },
       include: { room: true, bookedBy: { select: { id: true } } },
@@ -539,7 +589,6 @@ router.post("/:id/confirm", auth, async (req: any, res) => {
       });
     }
 
-    // ถ้าไม่มีใครค้าง INVITED → เปลี่ยนเป็น AWAITING_ADMIN_APPROVAL
     const stillInvited = await prisma.bookingInvite.count({
       where: { bookingId: id, status: InviteStatus.INVITED },
     });
@@ -562,7 +611,9 @@ router.post("/:id/confirm", auth, async (req: any, res) => {
  */
 router.post("/:id/decline", auth, async (req: any, res) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseNumericIdParam(req, res);
+    if (id === null) return;
+
     const userId = Number(req.user!.sub);
 
     const invite = await prisma.bookingInvite.findFirst({
@@ -576,7 +627,6 @@ router.post("/:id/decline", auth, async (req: any, res) => {
       data: { status: InviteStatus.DECLINED },
     });
 
-    // แจ้งผู้จองว่ามีคนปฏิเสธ
     const b = await prisma.booking.findUnique({
       where: { id },
       include: { room: true, bookedBy: { select: { id: true } } },
@@ -608,7 +658,9 @@ router.post("/:id/decline", auth, async (req: any, res) => {
  */
 router.post("/:id/approve", auth, requireAdmin, async (req: any, res) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseNumericIdParam(req, res);
+    if (id === null) return;
+
     const booking = await prisma.booking.findUnique({
       where: { id },
       include: {
@@ -620,7 +672,6 @@ router.post("/:id/approve", auth, requireAdmin, async (req: any, res) => {
     });
     if (!booking) return res.status(404).json({ error: "Booking not found" });
 
-    // ตรวจชนเวลาโดยไม่นับตัวเอง
     if (
       await isRoomTimeBlocked(
         booking.roomId,
@@ -639,7 +690,6 @@ router.post("/:id/approve", auth, requireAdmin, async (req: any, res) => {
       data: { status: BookingStatus.APPROVED },
     });
 
-    // 🔔 แจ้งผู้จอง + ผู้ถูกเชิญ + ผู้จดประชุม
     const title = "การจองได้รับการอนุมัติ";
     const msg = `การประชุมห้อง ${booking.room?.roomName ?? "-"} (${booking.startTime.toLocaleString()}) ได้รับการอนุมัติแล้ว`;
 
@@ -683,12 +733,12 @@ router.post("/:id/approve", auth, requireAdmin, async (req: any, res) => {
 
 /** ====== CANCEL BOOKING ======
  * PATCH /api/bookings/:id/cancel
- * เงื่อนไข: ผู้จองเอง หรือ admin
- * ผลพวง: เซ็ต Booking เป็น CANCELLED และ service ที่ค้างงาน → REJECTED
  */
 router.patch("/:id/cancel", auth, async (req: any, res) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseNumericIdParam(req, res);
+    if (id === null) return;
+
     const me = req.user!; // { sub: number }
 
     const booking = await prisma.booking.findUnique({
@@ -702,7 +752,6 @@ router.patch("/:id/cancel", auth, async (req: any, res) => {
     });
     if (!booking) return res.status(404).json({ error: "Booking not found" });
 
-    // ตรวจสิทธิ์: ดึง isAdmin ปัจจุบันจาก DB ให้ชัวร์
     const meRow = await prisma.user.findUnique({
       where: { id: me.sub },
       select: { position: { select: { isAdmin: true } } },
@@ -714,7 +763,7 @@ router.patch("/:id/cancel", auth, async (req: any, res) => {
     }
 
     if (booking.status === BookingStatus.CANCELLED) {
-      return res.json({ booking }); // ยกเลิกไปแล้ว
+      return res.json({ booking });
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -731,7 +780,6 @@ router.patch("/:id/cancel", auth, async (req: any, res) => {
         data: { status: ServiceStatus.REJECTED },
       });
 
-      // 🔔 แจ้งทุกคนว่าการประชุมถูกยกเลิก
       const audience = Array.from(
         new Set([
           booking.bookedBy.id,
@@ -758,13 +806,14 @@ router.patch("/:id/cancel", auth, async (req: any, res) => {
   }
 });
 
-/** GET /api/bookings/:id/pdf — ดาวน์โหลด PDF ของรายการจอง */
+/** ====== EXPORT PDF ======
+ * GET /api/bookings/:id/pdf
+ */
 router.get("/:id/pdf", auth, async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const id = parseNumericIdParam(req, res);
+    if (id === null) return;
 
-    // Load booking using relations that exist in the current schema
     const booking = await prisma.booking.findUnique({
       where: { id },
       include: {
@@ -787,13 +836,12 @@ router.get("/:id/pdf", auth, async (req, res) => {
         name: a.user?.fullName ?? `user#${a.userId}`,
         email: a.user?.email ?? undefined,
       })),
-      equipments: [], // not present in current schema
+      equipments: [],
       agenda: booking.purpose ?? "",
       notes: "",
     };
 
     const html = renderBookingHtml(data);
-
     const pdf = await htmlToPdfBuffer(html, {
       format: "A4",
       landscape: false,
@@ -811,6 +859,33 @@ router.get("/:id/pdf", auth, async (req, res) => {
   } catch (err) {
     console.error("GET /api/bookings/:id/pdf error:", err);
     return res.status(500).json({ error: "internal server error" });
+  }
+});
+
+/** ====== GET DETAIL (วางท้าย เพื่ออ่านง่าย + guard id ชัดเจน) ======
+ * GET /api/bookings/:id
+ */
+router.get("/:id", auth, async (req: any, res) => {
+  try {
+    const id = parseNumericIdParam(req, res);
+    if (id === null) return;
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: {
+        room: true,
+        bookedBy: { select: { id: true, fullName: true } },
+        requiredPositions: { include: { position: true } },
+        invites: { include: { user: { select: { id: true, fullName: true, positionId: true } } } },
+        noteTakers: { include: { user: { select: { id: true, fullName: true } } } },
+        services: { include: { service: { select: { id: true, name: true, category: true } } } },
+      },
+    });
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    res.json({ booking });
+  } catch (e) {
+    console.error("Get booking failed:", e);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 

@@ -1,156 +1,205 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- REPLACE or add this aside block so nav style matches Dashboard -->
-    <aside class="hidden lg:block fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-200 z-50">
-      <div class="h-full flex flex-col">
-        <div class="p-4 border-b border-gray-200">
-          <div class="flex items-center gap-2">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-xl shadow-md">🧹</div>
-            <div>
-              <h3 class="font-semibold text-gray-900 text-sm">Housekeeping</h3>
-              <p class="text-[10px] text-gray-500">มอบหมายงาน</p>
-            </div>
-          </div>
-        </div>
-
-        <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
-          <router-link
-            v-for="item in sidebarItems"
-            :key="item.to"
-            :to="item.to"
-            :class="['nav-link', isActive(item) ? 'nav-active' : '']"
-          >
-            <span class="text-lg" v-html="item.icon"></span>
-            <span class="text-sm">{{ item.label }}</span>
-          </router-link>
-        </nav>
-
-        <div class="p-3 border-t border-gray-200">
-          <!-- optional user summary -->
-        </div>
-      </div>
-    </aside>
-
     <!-- Header -->
-    <header class="fixed top-0 right-0 left-0 lg:left-64 bg-white border-b z-30">
+    <header class="fixed top-0 right-0 left-0 bg-white border-b z-30">
       <div class="flex items-center justify-between px-6 py-3">
         <div class="text-lg font-semibold">มอบหมายงาน</div>
-        <div>
-          <button @click="back" class="px-3 py-2 border rounded">กลับ</button>
-        </div>
+        <button @click="back" class="px-3 py-2 border rounded">กลับ</button>
       </div>
     </header>
 
-    <!-- Content -->
-    <main class="lg:ml-64 pt-20 px-6">
+    <main class="pt-20 px-6">
       <div class="max-w-3xl mx-auto py-6">
         <div v-if="error" class="mb-4 p-3 bg-red-50 text-red-700 rounded">{{ error }}</div>
-        <div class="mb-4">
+
+        <!-- งาน -->
+        <div class="mb-5 p-4 bg-white border rounded-lg">
           <div class="text-sm text-gray-600">งาน</div>
-          <div class="font-medium">{{ task?.title || '-' }}</div>
-          <div class="text-xs text-gray-500">ห้อง: {{ task?.roomName || '-' }}</div>
+          <div class="font-semibold text-gray-900">{{ displayTask.title || '-' }}</div>
+          <div class="text-xs text-gray-600 mt-1">
+            ห้อง: <span class="font-medium">{{ displayTask.roomName || '-' }}</span>
+          </div>
+          <div class="text-xs text-gray-500 mt-1" v-if="displayTask.timeRange">
+            เวลา: {{ displayTask.timeRange }}
+          </div>
         </div>
 
+        <!-- เลือกคนมอบหมาย (แม่บ้านเท่านั้น) -->
         <div class="mb-4">
-          <input v-model="candidateQuery" @input="loadCandidates" placeholder="ค้นหาชื่อผู้รับ" class="px-3 py-2 border rounded w-full" />
+          <label class="block text-sm text-gray-700 mb-1">เลือกผู้รับงาน (เฉพาะตำแหน่ง “แม่บ้าน”)</label>
+          <select
+            v-model="selectedUserId"
+            class="w-full px-3 py-2 border rounded"
+            :disabled="loadingHK || housekeepers.length===0"
+          >
+            <option value="">-- เลือกผู้รับงาน --</option>
+            <option v-for="u in housekeepers" :key="u.id" :value="u.id">
+              {{ optionLabel(u) }}
+            </option>
+          </select>
+          <div class="text-xs text-gray-500 mt-2" v-if="loadingHK">กำลังโหลดรายชื่อแม่บ้าน...</div>
+          <div class="text-xs text-gray-500 mt-2" v-else-if="housekeepers.length===0">ไม่พบผู้ที่มีตำแหน่ง “แม่บ้าน”</div>
+          <div class="text-xs text-red-600 mt-2" v-if="hkError">{{ hkError }}</div>
         </div>
 
-        <div v-if="loading" class="text-gray-500 mb-4">กำลังโหลด...</div>
-        <div v-if="candidates.length === 0 && !loading" class="text-gray-500">ไม่พบผู้สมัคร</div>
-
-        <ul class="space-y-2">
-          <li v-for="c in candidates" :key="c.id" class="flex items-center justify-between p-3 bg-white border rounded">
-            <div>
-              <div class="font-medium">{{ c.fullName || c.name || c.username }}</div>
-              <div class="text-xs text-gray-500">{{ c.email || c.phone || '' }}</div>
-            </div>
-            <div>
-              <button @click="assign(c)" class="px-3 py-1 bg-emerald-600 text-white rounded">มอบหมาย</button>
-            </div>
-          </li>
-        </ul>
+        <div class="flex gap-2">
+          <button
+            class="px-4 py-2 bg-emerald-600 text-white rounded disabled:opacity-50"
+            :disabled="!selectedUserId || assigning"
+            @click="assignSelected"
+          >
+            {{ assigning ? 'กำลังมอบหมาย...' : 'มอบหมาย' }}
+          </button>
+          <button class="px-4 py-2 border rounded" @click="back">ยกเลิก</button>
+        </div>
       </div>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/lib/api.js'
 import Swal from 'sweetalert2'
-import 'sweetalert2/dist/sweetalert2.min.css' // ADDED
+import 'sweetalert2/dist/sweetalert2.min.css'
 
 const route = useRoute()
-
-const sidebarItems = [
-  { to: '/housekeeping/dashboard', label: 'Dashboard', icon: '🏠' },
-  { to: '/housekeeping/tasks', label: 'งานทั้งหมด', icon: '🧾' },
-  { to: '/housekeeping/assign', label: 'มอบหมาย', icon: '👥' },
-]
-
-function isActive(item) {
-  try { return route.path === item.to || route.path.startsWith(item.to) } catch { return false }
-}
-
 const router = useRouter()
-const taskId = route.query.taskId
-const roomId = route.query.roomId
 
+/** Params */
+const taskId = String(route.query.taskId || '')
+const roomIdFromQuery = route.query.roomId ? Number(route.query.roomId) : undefined
+
+/** State */
 const task = ref(null)
-const candidates = ref([])
-const candidateQuery = ref('')
-const loading = ref(false)
 const error = ref('')
 
+/** Housekeepers (dropdown) */
+const housekeepers = ref([])
+const loadingHK = ref(false)
+const hkError = ref('')
+const selectedUserId = ref('')
+const assigning = ref(false)
+
+/** Helpers */
+function fmtTimeRange(s, e) {
+  if (!s || !e) return ''
+  const o = { hour: '2-digit', minute: '2-digit' }
+  return `${new Date(s).toLocaleTimeString([], o)} - ${new Date(e).toLocaleTimeString([], o)}`
+}
+
+const displayTask = computed(() => {
+  const t = task.value || {}
+  const title =
+    t.title ||
+    t.taskTitle ||
+    t.name ||
+    t.room?.roomName ||
+    t.booking?.title ||
+    `งาน #${t.id || taskId}`
+
+  const roomName =
+    t.roomName ||
+    t.room?.roomName ||
+    t.booking?.room?.roomName ||
+    t.location ||
+    ''
+
+  const start = t.startTime || t.start || t.booking?.startTime
+  const end   = t.endTime   || t.end   || t.booking?.endTime
+  return {
+    title,
+    roomName,
+    startTime: start,
+    endTime: end,
+    timeRange: (start && end) ? fmtTimeRange(start, end) : ''
+  }
+})
+
+/** Load task (รองรับหลาย endpoint) */
 async function fetchTaskInfo() {
-  try {
-    if (!taskId) return
-    const candidates = [
-      [`/api/housekeeping/tasks/${taskId}`, {}],
-      [`/api/housekeeping/${taskId}`, {}],
-      [`/api/bookings/${taskId}`, {}]
-    ]
-    let res = null
-    for (const [url,opt] of candidates) {
-      try { res = await api.get(url, opt); if (res?.status === 200) break } catch(e){ res = null }
-    }
-    task.value = res?.data ?? null
-  } catch {
-    task.value = null
+  // สมมุติว่า query ใช้ ?bookingId=xxx (ถ้าใช้ชื่ออื่นปรับตามจริง)
+  const bookingId = route.query.bookingId || route.query.taskId
+  if (!bookingId) { task.value = null; return }
+  const { data } = await api.get(`/api/bookings/${bookingId}`)
+  // รองรับทั้ง data.booking และ data โดยให้ได้ object เดียวชื่อ booking
+  const booking = data?.booking ?? data
+  task.value = {
+    id: booking?.id,
+    roomName: booking?.room?.roomName,
+    startTime: booking?.startTime,
+    endTime: booking?.endTime,
   }
 }
 
-async function loadCandidates() {
-  loading.value = true
-  error.value = ''
+/** สร้าง label ใน dropdown */
+function optionLabel(u) {
+  const name = u.fullName || u.name || u.username || `User #${u.id}`
+  const extra = u.position?.name || u.email || ''
+  return extra ? `${name} • ${extra}` : name
+}
+
+/** กรองเฉพาะ “แม่บ้าน” — รองรับหลายสคีมา */
+function isHousekeeper(u) {
+  // มีการ include position มาจาก API
+  if (u.position?.isHousekeeper === true) return true
+  // fallback: กรณี backend ไม่ส่ง flag มา
+  if (/แม่บ้าน/i.test(u.position?.name || '')) return true
+  if (u.role?.toUpperCase?.() === 'HOUSEKEEPER') return true
+  return false
+}
+
+/** โหลดรายชื่อแม่บ้าน (มี fallback) */
+async function loadHousekeepers() {
+  housekeepers.value = []
+  loadingHK.value = true
+  hkError.value = ''
   try {
-    const candidatesEndpoints = [
-      ['/api/housekeeping/candidates', { params: { q: candidateQuery.value || undefined, roomId: roomId || undefined } }],
-      ['/api/users', { params: { q: candidateQuery.value || undefined, role: 'HOUSEKEEPER' } }]
-    ]
-    let res = null
-    for (const [url, opt] of candidatesEndpoints) {
-      try {
-        res = await api.get(url, opt)
-        if (res?.status === 200) break
-      } catch (e) { res = null }
+    if (!task.value?.startTime || !task.value?.endTime) {
+      // ถ้าไม่มีช่วงเวลา ให้ดึงแบบไม่กรองช่วงเวลาก็ได้ (แล้วแต่ต้องการ)
+      housekeepers.value = []
+      return
     }
-    candidates.value = res?.data?.items ?? res?.data ?? []
+    const start = new Date(task.value.startTime).toISOString()
+    const end   = new Date(task.value.endTime).toISOString()
+
+    // ถ้ามีคนถูก exclude (เช่น คนที่ลา/ว่างานนี้อยู่แล้ว) รวมเป็น id[]
+    const excludeIds = []
+
+    const { data } = await api.get('/api/notetakers/candidates', {
+      params: {
+        mode: 'housekeeper',
+        start,
+        end,
+        excludeIds: excludeIds.length ? excludeIds.join(',') : undefined,
+      }
+    })
+
+    // map ให้ dropdown ใช้
+    housekeepers.value = (data?.items ?? []).map((it) => ({
+      id: it.userId ?? it.user?.id ?? it.id,
+      fullName: it.user?.fullName ?? it.user?.name ?? it.fullName ?? `User #${it.userId ?? it.user?.id ?? it.id}`,
+      position: it.user?.position ?? it.position,
+      username: it.user?.username ?? it.username
+    }))
   } catch (e) {
-    console.error('loadCandidates', e)
-    error.value = e?.response?.data?.error || e?.message || 'โหลดผู้สมัครล้มเหลว'
-    candidates.value = []
+    console.error('loadHousekeepers', e)
+    hkError.value = e?.response?.data?.error || e?.message || 'Not Found'
   } finally {
-    loading.value = false
+    loadingHK.value = false
   }
 }
 
-async function assign(user) {
-  if (!taskId || !user?.id) return
+/** มอบหมายให้ user ที่เลือก */
+async function assignSelected() {
+  if (!taskId || !selectedUserId.value) return
+  const u = housekeepers.value.find(x => String(x.id) === String(selectedUserId.value))
+  const name = u ? (u.fullName || u.name || u.username) : `User #${selectedUserId.value}`
+
   const confirm = await Swal.fire({
     title: 'ยืนยันการมอบหมาย',
-    text: `มอบหมายงานให้ ${user.fullName || user.name || user.username}?`,
+    text: `มอบหมายงานให้ ${name}?`,
     icon: 'question',
     showCancelButton: true,
     confirmButtonText: 'มอบหมาย',
@@ -159,12 +208,18 @@ async function assign(user) {
   if (!confirm.isConfirmed) return
 
   try {
-    await api.post('/api/housekeeping/assign', { taskId, userId: user.id })
-    Swal.fire({ icon: 'success', title: 'มอบหมายเรียบร้อย', timer: 1400, showConfirmButton: false })
+    assigning.value = true
+    await api.post('/api/housekeeping/assign', {
+      taskId,
+      userId: Number(selectedUserId.value),
+    })
+    await Swal.fire({ icon: 'success', title: 'มอบหมายเรียบร้อย', timer: 1200, showConfirmButton: false })
     router.back()
   } catch (e) {
     console.error('assign', e)
     Swal.fire({ icon: 'error', title: 'มอบหมายไม่สำเร็จ', text: e?.response?.data?.error || e?.message || 'เกิดข้อผิดพลาด' })
+  } finally {
+    assigning.value = false
   }
 }
 
@@ -172,16 +227,6 @@ function back(){ router.back() }
 
 onMounted(async () => {
   await fetchTaskInfo()
-  loadCandidates()
+  await loadHousekeepers()
 })
 </script>
-
-<style scoped>
-/* reuse same nav classes if needed */
-.nav-link {
-  @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900;
-}
-.nav-active {
-  @apply bg-emerald-50 text-emerald-600;
-}
-</style>
