@@ -167,9 +167,7 @@ router.post("/", auth, async (req: any, res) => {
     };
 
     if (!roomId || !startTime || !endTime) {
-      return res
-        .status(400)
-        .json({ error: "roomId, startTime, endTime are required" });
+      return res.status(400).json({ error: "roomId, startTime, endTime are required" });
     }
 
     const s = new Date(startTime);
@@ -178,24 +176,19 @@ router.post("/", auth, async (req: any, res) => {
       return res.status(400).json({ error: "Invalid startTime or endTime" });
     }
     if (e <= s) {
-      return res
-        .status(400)
-        .json({ error: "endTime must be later than startTime" });
+      return res.status(400).json({ error: "endTime must be later than startTime" });
     }
 
-    const room = await prisma.meetingRoom.findUnique({
-      where: { id: Number(roomId) },
-    });
+    const room = await prisma.meetingRoom.findUnique({ where: { id: Number(roomId) } });
     if (!room) return res.status(404).json({ error: "Room not found" });
 
     if (await isRoomTimeBlocked(room.id, s, e)) {
-      return res
-        .status(409)
-        .json({ error: "Room is not available in the selected time range" });
+      return res.status(409).json({ error: "Room is not available in the selected time range" });
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      // 1) booking
+    // ทำทุกอย่างในทรานแซกชัน
+    const created = await prisma.$transaction(async (tx) => {
+      // (1) booking
       const booking = await tx.booking.create({
         data: {
           roomId: room.id,
@@ -206,7 +199,7 @@ router.post("/", auth, async (req: any, res) => {
         },
       });
 
-      // 2) required positions
+      // (2) required positions
       if (requiredPositionIds.length > 0) {
         await tx.bookingRequiredPosition.createMany({
           data: requiredPositionIds.map((pid) => ({
@@ -217,7 +210,7 @@ router.post("/", auth, async (req: any, res) => {
         });
       }
 
-      // 3) services
+      // (3) services
       if (serviceIds.length > 0) {
         await tx.bookingService.createMany({
           data: serviceIds.map((sid) => ({
@@ -229,7 +222,7 @@ router.post("/", auth, async (req: any, res) => {
         });
       }
 
-      // 4) invites: พนักงานทั้งหมดในตำแหน่งที่ถูกเลือก
+      // (4) invites: พนักงานทั้งหมดในตำแหน่งที่ถูกเลือก
       if (requiredPositionIds.length > 0) {
         const attendees = await tx.user.findMany({
           where: { positionId: { in: requiredPositionIds.map(Number) } },
@@ -246,21 +239,17 @@ router.post("/", auth, async (req: any, res) => {
             skipDuplicates: true,
           });
 
-          // 🔔 แจ้งเตือนผู้ถูกเชิญ (INVITE)
           await notifyMany(tx, attendees.map((a) => a.id), {
             type: NotifType.INVITE,
             title: "เชิญเข้าร่วมการประชุม",
-            message: `คุณได้รับคำเชิญเข้าประชุม ห้อง ${room.roomName} (${fmtRange(
-              s,
-              e
-            )})`,
+            message: `คุณได้รับคำเชิญเข้าประชุม ห้อง ${room.roomName} (${fmtRange(s, e)})`,
             refType: RefType.BOOKING,
             refId: booking.id,
           });
         }
       }
 
-      // 5) เลือก NoteTaker 2 คนจากคิว (auto-accept) แล้วหมุนคิวไปท้าย
+      // (5) เลือก NoteTaker 2 คนจากคิว (auto-accept) แล้วหมุนคิวไปท้าย
       const notetakers = await tx.noteTakerQueue.findMany({
         where: { isActive: true },
         orderBy: { orderNo: "asc" },
@@ -269,7 +258,7 @@ router.post("/", auth, async (req: any, res) => {
       });
 
       if (notetakers.length > 0) {
-        // (A) บันทึกผู้จดประชุม (ACCEPTED)
+        // 5A) บันทึกผู้จดประชุม (ACCEPTED)
         await tx.bookingNoteTaker.createMany({
           data: notetakers.map((n, idx) => ({
             bookingId: booking.id,
@@ -280,7 +269,7 @@ router.post("/", auth, async (req: any, res) => {
           skipDuplicates: true,
         });
 
-        // (B) ทำให้มี invite ด้วยก็ set ACCEPTED ไปเลย
+        // 5B) สร้าง invite ให้และ set ACCEPTED
         await tx.bookingInvite.createMany({
           data: notetakers.map((n) => ({
             bookingId: booking.id,
@@ -290,25 +279,21 @@ router.post("/", auth, async (req: any, res) => {
           skipDuplicates: true,
         });
 
-        // 🔔 แจ้งผู้ถูกมอบหมายจดประชุม
+        // 5C) แจ้งผู้ถูกมอบหมาย
         await notifyMany(tx, notetakers.map((n) => n.userId), {
           type: NotifType.INVITE,
           title: "มอบหมายให้จดประชุม",
-          message: `คุณถูกมอบหมายให้เป็นผู้จดประชุม ห้อง ${room.roomName} (${fmtRange(
-            s,
-            e
-          )})`,
+          message: `คุณถูกมอบหมายให้เป็นผู้จดประชุม ห้อง ${room.roomName} (${fmtRange(s, e)})`,
           refType: RefType.BOOKING,
           refId: booking.id,
         });
 
-        // (C) หมุนคิวไปท้าย
+        // 5D) หมุนคิวไปท้าย
         const maxOrder = await tx.noteTakerQueue.aggregate({
           _max: { orderNo: true },
           where: { isActive: true },
         });
         let base = (maxOrder._max.orderNo || 0) + 1;
-
         for (const n of notetakers) {
           await tx.noteTakerQueue.update({
             where: { userId: n.userId },
@@ -320,12 +305,26 @@ router.post("/", auth, async (req: any, res) => {
       return booking;
     });
 
-    res.status(201).json({ booking: result });
+    // ✅ ดึงกลับพร้อม relations ที่ UI ต้องใช้ (รวม services.service)
+    const full = await prisma.booking.findUnique({
+      where: { id: created.id },
+      include: {
+        room: true,
+        bookedBy: { select: { id: true, fullName: true } },
+        requiredPositions: { include: { position: true } },
+        invites: { include: { user: { select: { id: true, fullName: true } } } },
+        noteTakers: { include: { user: { select: { id: true, fullName: true } } } },
+        services: { include: { service: true } }, // สำคัญสำหรับ Housekeeping/IT
+      },
+    });
+
+    res.status(201).json({ booking: full });
   } catch (e) {
     console.error("Create booking failed:", e);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 /** ====== LIST BOOKINGS ======
  * GET /api/bookings?mine=1&status=APPROVED&status_not=CANCELLED&status_in=A,B&start=ISO&end=ISO&start_gte=ISO&roomId=1&withInviteStats=1&page=1&pageSize=20
@@ -487,14 +486,10 @@ router.get("/:id", auth, async (req: any, res) => {
         room: true,
         bookedBy: { select: { id: true, fullName: true } },
         requiredPositions: { include: { position: true } },
-        invites: {
-          include: {
-            user: { select: { id: true, fullName: true, positionId: true } },
-          },
-        },
-        noteTakers: {
-          include: { user: { select: { id: true, fullName: true } } },
-        },
+        invites: { include: { user: { select: { id: true, fullName: true, positionId: true } } } },
+        noteTakers: { include: { user: { select: { id: true, fullName: true } } } },
+        // ✅ เพิ่มบรรทัดนี้
+         services: { include: { service: { select: { id: true, name: true, category: true } } } },
       },
     });
     if (!booking) return res.status(404).json({ error: "Booking not found" });

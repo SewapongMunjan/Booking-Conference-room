@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Left Sidebar (reuse admin style) -->
+    <!-- Left Sidebar -->
     <aside class="hidden lg:block fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-200 z-50">
       <div class="h-full flex flex-col">
         <div class="p-4 border-b border-gray-200">
@@ -57,7 +57,7 @@
           <div class="hidden md:block relative">
             <input v-model="q" placeholder="ค้นหาห้อง / งาน" class="w-64 pl-3 pr-3 py-2 rounded-xl border border-gray-200 text-sm" />
           </div>
-          <button @click="load" class="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">รีเฟรช</button>
+          <button @click="loadAll" class="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">รีเฟรช</button>
           <button @click="logout" class="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">ออกจากระบบ</button>
         </div>
       </div>
@@ -93,6 +93,7 @@
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- รายการห้อง -->
             <div class="modern-card">
               <h2 class="text-lg font-semibold mb-4">รายการห้อง</h2>
               <div v-if="loading" class="text-sm text-gray-500">กำลังโหลด...</div>
@@ -101,7 +102,16 @@
                   <div class="flex items-start justify-between gap-3">
                     <div>
                       <div class="font-semibold">{{ room.name }}</div>
-                      <div class="text-xs text-gray-500">การประชุม: {{ room.meetings?.length ?? 0 }}</div>
+                      <div class="text-xs text-gray-500">{{ room.timeRange }}</div>
+                      <div class="mt-1 text-xs">
+                        ผู้เข้าร่วม(ยืนยัน): <b>{{ room.confirmed }}</b>
+                        <span class="text-gray-500"> / เชิญทั้งหมด: {{ room.invitedTotal }}</span>
+                      </div>
+                      <div class="mt-1 text-xs text-gray-700">
+                        บริการ:
+                        <span v-if="room.services.length===0" class="text-gray-500">-</span>
+                        <span v-else>{{ room.services.join(', ') }}</span>
+                      </div>
                       <div v-if="room.tasks?.length" class="mt-2 text-xs text-gray-600">
                         งาน: <span class="font-medium">{{ room.tasks.length }}</span>
                       </div>
@@ -115,6 +125,7 @@
               </div>
             </div>
 
+            <!-- งานด่วน -->
             <div class="modern-card">
               <h2 class="text-lg font-semibold mb-4">งานด่วน</h2>
               <div v-if="urgentTasks.length === 0" class="text-sm text-gray-500">ไม่มีงานด่วน</div>
@@ -131,11 +142,18 @@
               </ul>
             </div>
 
+            <!-- อุปกรณ์ที่ต้องเตรียม -->
             <div class="modern-card">
               <h2 class="text-lg font-semibold mb-4">อุปกรณ์ที่ต้องเตรียม</h2>
               <div v-if="equipSummary.length === 0" class="text-sm text-gray-500">ไม่มีข้อมูล</div>
               <div v-else class="flex flex-wrap gap-2">
-                <span v-for="e in equipSummary" :key="e" class="px-2 py-1 bg-indigo-50 text-indigo-600 rounded text-xs">{{ e }}</span>
+                <span
+                  v-for="e in equipSummary"
+                  :key="e.label"
+                  class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs"
+                >
+                  {{ e.label }}: {{ e.qty }}
+                </span>
               </div>
             </div>
           </div>
@@ -151,7 +169,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import api from '@/lib/api.js'
 import Swal from 'sweetalert2'
-import 'sweetalert2/dist/sweetalert2.min.css' // ADDED
+import 'sweetalert2/dist/sweetalert2.min.css'
 
 const router = useRouter()
 const route = useRoute()
@@ -159,40 +177,58 @@ const me = ref(null)
 const loading = ref(false)
 const error = ref('')
 const q = ref('')
-const rooms = ref([])
+
+/** โครงข้อมูลหน้า */
+const rooms = ref([]) // [{ id, name, location, timeRange, confirmed, invitedTotal, services:[], tasks:[] }]
 const timer = ref(null)
 
-const roomsCount = computed(() => rooms.value.length)
-const pendingJobs = computed(() => rooms.value.reduce((s, r) => s + (r.tasks?.filter(t => t.status !== 'done').length || 0), 0))
-const doneJobs = computed(() => rooms.value.reduce((s, r) => s + (r.tasks?.filter(t => t.status === 'done').length || 0), 0))
+/* ===== Summary Cards ===== */
+const roomsCount  = computed(() => rooms.value.length)
+const pendingJobs = computed(() =>
+  rooms.value.reduce((s, r) => s + (r.tasks?.filter(t => t.status === 'PENDING' || t.status === 'IN_PROGRESS').length || 0), 0)
+)
+const doneJobs    = computed(() =>
+  rooms.value.reduce((s, r) => s + (r.tasks?.filter(t => t.status === 'COMPLETED' || t.status === 'done').length || 0), 0)
+)
 
+/* ===== Views ===== */
 const filteredRooms = computed(() => {
   const term = q.value.trim().toLowerCase()
   if (!term) return rooms.value
   return rooms.value.filter(r =>
     String(r.name || '').toLowerCase().includes(term) ||
+    (r.services || []).some(s => s.toLowerCase().includes(term)) ||
     (r.tasks || []).some(t => String(t.title || '').toLowerCase().includes(term))
   )
 })
 
 const urgentTasks = computed(() => {
   const list = []
+  const now = Date.now()
+  const within = 60 * 60 * 1000
   rooms.value.forEach(r => {
-    (r.tasks || []).forEach(t => {
-      if (t.priority === 'high' || t.isUrgent) list.push({...t, roomName: r.name})
-    })
+    if (!r._start) return
+    const diff = r._start - now
+    if (diff > 0 && diff <= within) {
+      // ดึงงานในห้องนั้นมาถือเป็น "งานด่วน"
+      (r.tasks || []).forEach(t => list.push({ ...t, roomName: r.name }))
+    }
   })
   return list
 })
 
+// รวมบริการทั้งหมด พร้อมจำนวนที่แนะนำ = จำนวนผู้เข้าร่วมยืนยัน
 const equipSummary = computed(() => {
-  const set = new Set()
-  rooms.value.forEach(r => {
-    (r.equipments || []).forEach(e => set.add(e))
-  })
-  return Array.from(set)
+  const agg = new Map()
+  for (const r of rooms.value) {
+    for (const s of r.services || []) {
+      agg.set(s, (agg.get(s) || 0) + (r.confirmed || 0))
+    }
+  }
+  return Array.from(agg.entries()).map(([label, qty]) => ({ label, qty }))
 })
 
+/* ===== API ===== */
 async function fetchMe() {
   try {
     const { data } = await api.get('/api/auth/me')
@@ -202,83 +238,112 @@ async function fetchMe() {
   }
 }
 
-async function load() {
+// แปลงช่วงเวลาให้อ่านง่าย (พ.ศ.)
+function fmtRange(startISO, endISO){
+  const a = new Date(startISO), b = new Date(endISO)
+  const pad = n => String(n).padStart(2,'0')
+  const th = (d)=> `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()+543} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return `${th(a)} - ${th(b)}`
+}
+
+// เติมจำนวนผู้ยืนยัน/เชิญทั้งหมด จาก /api/bookings/:id
+async function hydrateAttendeeCounts(list){
+  const unique = Array.from(new Set(list.map(x => x.bookingId).filter(Boolean)))
+  // ทำทีละชุด เพื่อไม่ยิงถี่เกินไป
+  const batches = []
+  const copy = unique.slice()
+  while (copy.length) batches.push(copy.splice(0, 8))
+  const map = new Map()
+  for (const batch of batches){
+    await Promise.all(batch.map(async id => {
+      try{
+        const { data } = await api.get(`/api/bookings/${id}`)
+        const bk = data?.booking
+        if (!bk) { map.set(id, { confirmed: 0, invitedTotal: 0 }); return }
+        const acceptedInvites = (bk.invites || []).filter(v=>v.status==='ACCEPTED').length
+        const acceptedNoteTakers = (bk.noteTakers || []).filter(v=>v.status==='ACCEPTED').length
+        const organizer = bk.bookedBy ? 1 : 0
+         const serviceNames = (bk.services || [])
+          // .filter(bs => bs.service?.category === 'HOUSEKEEPING')
+          .map(bs => bs.service?.name)
+          .filter(Boolean)
+        map.set(id, {
+          confirmed: acceptedInvites + acceptedNoteTakers + organizer,
+          invitedTotal: (bk.invites || []).length + acceptedNoteTakers + organizer,
+          services: Array.from(new Set(serviceNames)),
+        })
+      }catch{
+        map.set(id, { confirmed: 0, invitedTotal: 0 })
+      }
+    }))
+  }
+  // เติมกลับเข้า list
+  list.forEach(r => {
+    const v = map.get(r.bookingId) || { confirmed: 0, invitedTotal: 0, services: [] }
+    r.confirmed = v.confirmed
+    r.invitedTotal = v.invitedTotal
+    // ถ้าเดิมมี services จาก endpoint housekeeping ก็รวมกันแบบไม่ซ้ำ
+    const existing = Array.isArray(r.services) ? r.services : []
+    r.services = Array.from(new Set([ ...existing, ...v.services ]))
+  })
+}
+
+async function loadFromHousekeeping(){
+  // ข้อมูลที่ backend ส่งมาจาก /api/housekeeping/tasks
+  const { data } = await api.get('/api/housekeeping/tasks')
+  const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
+  // ปรับรูปแบบเป็นห้อง
+  const result = items.map(it => ({
+    id: it.room?.id ?? it.roomId ?? `room-${it.bookingId ?? it.id}`,
+    bookingId: it.bookingId,
+    name: it.room?.roomName ?? it.room?.name ?? it.roomName ?? 'ไม่ระบุ',
+    location: it.room?.location,
+    services: (it.services || []).map(s => s.name || s),
+    timeRange: fmtRange(it.startTime, it.endTime),
+    _start: new Date(it.startTime).getTime(),
+    tasks: it.tasks || [], // ถ้ามี
+  }))
+  await hydrateAttendeeCounts(result)
+  rooms.value = result
+}
+
+async function loadAll(){
   loading.value = true
   error.value = ''
-  try {
-    const date = new Date().toISOString().slice(0,10)
-    const candidates = [
-      ['/api/housekeeping/manage', {}],
-      ['/api/housekeeping/dashboard', {}],
-      ['/api/bookings', { params: { date, page:1, pageSize:500 } }]
-    ]
-
-    let res = null
-    for (const [url, opt] of candidates) {
-      try {
-        res = await api.get(url, opt)
-        if (res?.status === 200) break
-      } catch (e) {
-        // continue trying other endpoints
-        console.warn('[HousekeepingDashboard] try', url, 'failed', e?.response?.status || e?.message)
-        res = null
-      }
-    }
-
-    if (!res) {
-      error.value = 'ไม่สามารถโหลดข้อมูลได้จาก backend'
+  try{
+    await loadFromHousekeeping()
+  }catch(e){
+    console.warn('fallback bookings list', e?.response?.status || e?.message)
+    // fallback: ลองดึงจาก /api/bookings ถ้า endpoint housekeeping ไม่มี
+    try{
+      const today = new Date()
+      const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
+      const end   = new Date(today.getFullYear(), today.getMonth(), today.getDate()+1).toISOString()
+      const { data } = await api.get('/api/bookings', { params: { start, end, page:1, pageSize:200 } })
+      const items = data?.items || []
+      const mapped = items.map(b => ({
+        id: b.room?.id ?? b.roomId ?? `room-${b.id}`,
+        bookingId: b.id,
+        name: b.room?.roomName ?? b.room?.name ?? 'ไม่ระบุ',
+        location: b.room?.location,
+        services: (b.services || []).map(s => s.service?.name || s.name).filter(Boolean),
+        timeRange: fmtRange(b.startTime, b.endTime),
+        _start: new Date(b.startTime).getTime(),
+        tasks: [],
+      }))
+      await hydrateAttendeeCounts(mapped)
+      rooms.value = mapped
+    }catch(err){
+      console.error('[HousekeepingDashboard] load error', err)
+      error.value = err?.response?.data?.error || err?.message || 'โหลดข้อมูลล้มเหลว'
       rooms.value = []
-      return
     }
-
-    // normalize data
-    if ((res.config?.url || '').includes('/housekeeping')) {
-      const items = res.data?.items ?? res.data ?? []
-      const map = new Map()
-      for (const it of items) {
-        const roomId = it.roomId ?? it.room?.id ?? ('room-' + (it.id || Math.random()))
-        const roomName = it.roomName ?? it.room?.name ?? 'ไม่ระบุ'
-        const r = map.get(roomId) || { id: roomId, name: roomName, meetings: [], tasks: [], equipments: [], location: it.room?.location }
-        r.tasks.push({
-          id: it.id,
-          title: it.title ?? it.task ?? 'งาน',
-          status: it.status ?? 'pending',
-          priority: it.priority ?? it.isUrgent ? 'high' : 'normal',
-          assignedToName: it.assignedTo?.fullName ?? it.assignedToName
-        })
-        map.set(roomId, r)
-      }
-      rooms.value = Array.from(map.values())
-    } else {
-      const items = res.data?.items ?? res.data ?? []
-      const map = new Map()
-      for (const b of items) {
-        const roomId = b.roomId ?? b.room?.id ?? `room-${b.id}`
-        const r = map.get(roomId) || { id: roomId, name: b.room?.name ?? 'ไม่ระบุ', meetings: [], tasks: [], equipments: [], location: b.room?.location }
-        r.meetings.push({
-          id: b.id,
-          title: b.title ?? b.agenda,
-          startAt: b.startAt ?? b.dateStart,
-          endAt: b.endAt ?? b.dateEnd,
-          organizerName: b.organizer?.fullName ?? b.organizer?.username
-        })
-        if (Array.isArray(b.equipments) && b.equipments.length) {
-          r.equipments = Array.from(new Set([...(r.equipments || []), ...b.equipments.map(e => e.name ?? e)]))
-        }
-        map.set(roomId, r)
-      }
-      rooms.value = Array.from(map.values())
-    }
-    console.log('[HousekeepingDashboard] load OK', rooms.value.length)
-  } catch (e) {
-    console.error('[HousekeepingDashboard] load error', e)
-    error.value = e?.response?.data?.error || e?.message || 'โหลดข้อมูลล้มเหลว'
-    rooms.value = []
-  } finally {
+  }finally{
     loading.value = false
   }
 }
 
+/* ===== Actions ===== */
 async function markDone(task){
   if (!task?.id) return
   const confirm = await Swal.fire({
@@ -292,8 +357,8 @@ async function markDone(task){
   if (!confirm.isConfirmed) return
 
   try {
-    await api.post(`/api/housekeeping/update/${task.id}`, { status: 'done' })
-    task.status = 'done'
+    await api.post(`/api/housekeeping/update/${task.id}`, { status: 'COMPLETED' })
+    task.status = 'COMPLETED'
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'อัปเดตเรียบร้อย', timer: 1500, showConfirmButton: false })
   } catch (e) {
     console.error('markDone', e)
@@ -302,8 +367,7 @@ async function markDone(task){
 }
 
 function openAssign(room){
-  // ใช้ modal แจ้งหรือไปหน้า assign
-  router.push({ path: '/housekeeping/assign', query: { roomId: room.id } })
+  router.push({ path: '/housekeeping/assign', query: { roomId: room.id, bookingId: room.bookingId } })
 }
 
 function logout(){
@@ -312,40 +376,27 @@ function logout(){
   router.push('/login')
 }
 
+/* ===== Nav ===== */
 const sidebarItems = [
   { to: '/housekeeping/dashboard', label: 'Dashboard', icon: '🏠' },
-  { to: '/housekeeping/tasks', label: 'งานทั้งหมด', icon: '🧾' },
-  { to: '/housekeeping/assign', label: 'มอบหมาย', icon: '👥' },
+  { to: '/housekeeping/tasks',     label: 'งานทั้งหมด', icon: '🧾' },
+  { to: '/housekeeping/assign',    label: 'มอบหมาย',   icon: '👥' },
 ]
-
 function isActive(item) {
-  try {
-    return route.path === item.to || route.path.startsWith(item.to)
-  } catch {
-    return false
-  }
+  try { return route.path === item.to || route.path.startsWith(item.to) } catch { return false }
 }
 
+/* ===== Mount ===== */
 onMounted(async () => {
   await fetchMe()
-  await load()
-  timer.value = setInterval(load, 60_000)
+  await loadAll()
+  timer.value = setInterval(loadAll, 60_000)
 })
-
-onUnmounted(() => {
-  if (timer.value) clearInterval(timer.value)
-})
+onUnmounted(() => { if (timer.value) clearInterval(timer.value) })
 </script>
 
 <style scoped>
-/* ensure nav styles match admin */
-.nav-link {
-  @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900;
-}
-.nav-active {
-  @apply bg-emerald-50 text-emerald-600;
-}
-.modern-card {
-  @apply bg-white rounded-2xl border border-gray-200 p-6;
-}
+.nav-link { @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900; }
+.nav-active { @apply bg-emerald-50 text-emerald-600; }
+.modern-card { @apply bg-white rounded-2xl border border-gray-200 p-6; }
 </style>

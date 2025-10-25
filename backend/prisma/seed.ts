@@ -224,6 +224,16 @@ async function main() {
         requiresApproval: false,
       },
     }),
+     prisma.service.upsert({
+    where: { name: "Lunch" },
+    update: { departmentId: hkDept.id, requiresApproval: false },
+    create: {
+      name: "Lunch",
+      category: ServiceCategory.HOUSEKEEPING,
+      departmentId: hkDept.id,
+      requiresApproval: false,
+    },
+  }),
     prisma.service.upsert({
       where: { name: "Meeting Minutes" },
       update: { departmentId: ntDept.id, requiresApproval: false },
@@ -266,3 +276,4 @@ async function main() {
     await prisma.$disconnect();
   }
 })();
+
