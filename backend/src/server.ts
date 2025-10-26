@@ -10,6 +10,8 @@ import { Server as IOServer } from "socket.io";
 
 import { prisma } from "./prisma";
 
+import { auth } from "./middleware/auth";
+
 // Routers
 import authRouter, { meLegacyRouter } from "./routes/auth";
 import roomsRouter from "./routes/rooms";
@@ -68,6 +70,36 @@ app.get("/health", async (_req: Request, res: Response) => {
       db: "disconnected",
       error: (e as Error).message,
     });
+  }
+});
+
+app.get("/api/me", auth, async (req: Request, res: Response) => {
+  try {
+    const uid = req.user!.sub;
+    const user = await prisma.user.findUnique({
+      where: { id: uid },
+      include: { position: { include: { department: true } } },
+    });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      email: user.email,
+      position: user.position?.name ?? null,
+      department: user.position?.department?.name ?? null,
+      roles: {
+        isAdmin: user.position?.isAdmin ?? false,
+        isNoteManager: user.position?.isNoteManager ?? false,
+        isNoteTaker: user.position?.isNoteTaker ?? false,
+        isHousekeeper: user.position?.isHousekeeper ?? false,
+        isHousekeepingLead: user.position?.isHousekeepingLead ?? false,
+      },
+    });
+  } catch (err) {
+    console.error("GET /api/me failed:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 

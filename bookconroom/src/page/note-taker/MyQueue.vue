@@ -295,21 +295,47 @@ async function load(){
   } finally { loading.value=false }
 }
 
-onMounted(load)
+/* ---------------------------------------
+   เพิ่มฟังก์ชัน ensureSubstituteRequest:
+   - ใช้ตอนลากะทันหันสำเร็จ → สร้างคำขอหา “คนแทน”
+   - ดึง start/end จากรายการในตาราง (fallback: เรียก /api/meetings/:id)
+---------------------------------------- */
+async function ensureSubstituteRequest(bookingId){
+  // หา booking จาก state ปัจจุบันก่อน
+  let b = items.value.find(x => Number(x.id) === Number(bookingId))
+  if (!b) {
+    try {
+      const r = await api.get(`/api/meetings/${bookingId}`)
+      b = r.data?.item || r.data
+    } catch (_) { /* เงียบไว้ */ }
+  }
+  if (!b || !b.startTime || !b.endTime) return
 
-async function logout(){
-  try { await api.post('/api/logout') } catch(_) {}
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('user_role')
-  router.push('/login')
+  try {
+    await api.post('/api/notetakers/requests', {
+      bookingId: b.id,
+      start: b.startTime,
+      end: b.endTime
+    })
+    // บอกหน้า Substitute ให้รีโหลด
+    window.dispatchEvent(new Event('notetakers:requests:changed'))
+  } catch (e) {
+    // ไม่ให้ fail หลักล้ม ถ้าสร้าง request ไม่ผ่าน แค่แจ้งเตือนเงียบๆ ใน console
+    console.warn('create substitute request failed', e?.response?.data || e?.message)
+  }
 }
 
-/** ลากะทันหัน (ประกาศไม่ว่างสำหรับ booking นั้นทันที) */
+/** ลากะทันหัน (ประกาศไม่ว่างสำหรับ booking นั้นทันที + สร้างคำขอแทนที่) */
 async function instantLeave(bookingId){
   const c = await Swal.fire({ title:'ยืนยัน', text:'ประกาศไม่ว่างและขอคนแทนทันที?', icon:'warning', showCancelButton:true, confirmButtonText:'ยืนยัน' })
   if (!c.isConfirmed) return
   try{
+    // ใช้ endpoint เดิมของคุณ
     await api.patch('/api/notetakers/availability/unavailable', { bookingId })
+
+    // เพิ่ม: สร้างคำขอแทนที่ เพื่อให้หน้า Substitute เห็นทันที
+    await ensureSubstituteRequest(bookingId)
+
     Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ประกาศไม่ว่างแล้ว', timer:1400, showConfirmButton:false })
     await load()
   }catch(e){
@@ -335,11 +361,21 @@ async function acceptInvitation(bookingId){
   await backAvailable(bookingId)
 }
 
-/** ปฏิเสธคำเชิญ: ใช้ unavailable() เพื่อ set REPLACED + invite DECLINED */
+/** ปฏิเสธคำเชิญ: ใช้ unavailable() เพื่อ set REPLACED + สร้างคำขอแทนที่ */
 async function declineInvitation(bookingId){
   const ok = await Swal.fire({ title:'ยืนยัน', text:'ปฏิเสธงานนี้หรือไม่?', icon:'warning', showCancelButton:true, confirmButtonText:'ปฏิเสธ' })
   if (!ok.isConfirmed) return
+  // เรียกฟังก์ชันเดียวกับลากะทันหัน เพื่อสร้างคำขอแทนที่ให้ด้วย
   await instantLeave(bookingId)
+}
+
+onMounted(load)
+
+async function logout(){
+  try { await api.post('/api/logout') } catch(_) {}
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('user_role')
+  router.push('/login')
 }
 </script>
 

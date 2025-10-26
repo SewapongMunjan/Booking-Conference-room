@@ -426,7 +426,6 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
-import Swal from 'sweetalert2'  // ถ้าไม่ใช้ sweetalert ให้ลบบรรทัดนี้
 
 const router = useRouter()
 const showMobileMenu = ref(false)
@@ -437,7 +436,7 @@ function logout () {
   router.push('/login')
 }
 
-/* ===== DateTime + Calendar ===== */
+/* ===== DateTime ===== */
 const currentTime  = ref('')
 const currentDate  = ref('')
 const currentMonth = ref('')
@@ -456,47 +455,12 @@ const updateDateTime = () => {
   currentYear.value = now.getFullYear() + 543
 }
 
-const calendarDates = computed(() => {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth()
-  const today = now.getDate()
-  const firstDay = new Date(year, month, 1)
-  const startDate = firstDay.getDay()
-  const lastDay = new Date(year, month + 1, 0).getDate()
-  const prevMonth = new Date(year, month, 0).getDate()
-
-  const dates = []
-  let key = 0
-  for (let i = startDate - 1; i >= 0; i--) {
-    dates.push({ date: prevMonth - i, isToday: false, isOtherMonth: true, key: key++ })
-  }
-  for (let d = 1; d <= lastDay; d++) {
-    dates.push({ date: d, isToday: d === today, isOtherMonth: false, key: key++ })
-  }
-  const remain = 42 - dates.length
-  for (let d = 1; d <= remain; d++) {
-    dates.push({ date: d, isToday: false, isOtherMonth: true, key: key++ })
-  }
-  return dates.slice(0, 42)
-})
-
 /* ===== Notifications ===== */
 const me = ref(null)
 const showNotif = ref(false)
 const notifs = ref([])
 const unreadCount = ref(0)
 const loadingNoti = ref(false)
-const errorNoti = ref('')
-
-
-/** KPIs */
-const kpi = ref({ total: 0, approved: 0, pending: 0, cancelled: 0 })
-const deltas = ref({ approved: 0, pending: 0 })
-
-// --- เพิ่มบรรทัดนี้เพื่อแก้ ReferenceError ---
-const debugKpiRaw = ref(null)
-const debugError = ref('')
 
 async function fetchMe () {
   try {
@@ -507,13 +471,11 @@ async function fetchMe () {
 
 async function fetchNotifications() {
   loadingNoti.value = true
-  errorNoti.value = ''
   try {
     const { data } = await api.get('/api/notifications')
     notifs.value = data.items || []
     unreadCount.value = notifs.value.filter(n => !n.isRead).length
   } catch (e) {
-    errorNoti.value = 'ไม่สามารถโหลดการแจ้งเตือนได้'
     console.error(e)
   } finally {
     loadingNoti.value = false
@@ -530,9 +492,7 @@ function toggleNotif () {
   showNotif.value = !showNotif.value
   if (showNotif.value) fetchNotifications()
 }
-
 function refreshNotif () { return fetchNotifications() }
-
 async function markAllAsRead () {
   try {
     await api.post('/api/notifications/mark-all-read')
@@ -540,147 +500,36 @@ async function markAllAsRead () {
     unreadCount.value = 0
   } catch (e) { console.error(e) }
 }
-
 async function markAsRead (n) {
-  try {
-    await api.patch(`/api/notifications/${n.id}/read`)
-    n.isRead = true
-    unreadCount.value = Math.max(0, unreadCount.value - 1)
-  } catch (e) { console.error(e) }
+  try { await api.patch(`/api/notifications/${n.id}/read`); n.isRead = true; unreadCount.value = Math.max(0, unreadCount.value - 1) } catch (e) { console.error(e) }
 }
-
 function resolveRouteByNotif (n) {
-  const refType = n?.refType
-  const refId = n?.refId
+  const refType = n?.refType, refId = n?.refId
   switch (refType) {
     case 'BOOKING': return refId ? { path: `/booking/${refId}` } : { path: '/booking-list' }
-    case 'ISSUE': return { path: '/report', query: refId ? { issueId: String(refId) } : {} }
-    case 'INVITE': return { path: '/my-invites' }
-    default: return { path: '/home' }
+    case 'ISSUE':   return { path: '/report', query: refId ? { issueId: String(refId) } : {} }
+    case 'INVITE':  return { path: '/my-invites' }
+    default:        return { path: '/home' }
   }
 }
-
 async function goNotif (n) {
   try {
-    if (!n.isRead) {
-      n.isRead = true
-      await markAsRead(n)
-    }
+    if (!n.isRead) { n.isRead = true; await markAsRead(n) }
     showNotif.value = false
     router.push(resolveRouteByNotif(n))
-  } catch (e) {
-    n.isRead = false
-    console.error(e)
-  }
+  } catch (e) { n.isRead = false; console.error(e) }
 }
 
 function handleClickOutside (e) {
   const dropdown = document.querySelector('[data-noti-dropdown]')
   const bellBtn = document.querySelector('[data-noti-bell]')
   if (!dropdown) { showNotif.value = false; return }
-  if (!dropdown.contains(e.target) && !(bellBtn && bellBtn.contains(e.target))) {
-    showNotif.value = false
-  }
+  if (!dropdown.contains(e.target) && !(bellBtn && bellBtn.contains(e.target))) showNotif.value = false
 }
 
-let clockTimer = null
-let notiTimer = null
-
-onMounted(async () => {
-  updateDateTime()
-  clockTimer = setInterval(updateDateTime, 1000)
-  await fetchMe()
-  await fetchNotifications()
-  notiTimer = setInterval(() => fetchNotifications(), 30000)
-  document.addEventListener('click', handleClickOutside)
-
-  // <-- เพิ่มการโหลดรายการประชุมที่จะแสดง
-  try {
-    // โหลดทั้ง chart/summary และรายการ coming-soon / upcoming
-    await Promise.all([
-      loadRecentAndChart(),
-      fetchComingSoon(),
-      fetchUpcoming()
-    ])
-  } catch (e) {
-    console.warn('[Home] initial bookings load failed', e)
-  }
-
-  // รีเฟรชเมื่อมีการเปลี่ยน bookings จากส่วนอื่นของแอป
-  window.addEventListener('bookings:changed', () => {
-    loadRecentAndChart()
-    fetchComingSoon()
-    fetchUpcoming()
-  })
-})
-
-onUnmounted(() => {
-  if (clockTimer) clearInterval(clockTimer)
-  if (notiTimer) clearInterval(notiTimer)
-  document.removeEventListener('click', handleClickOutside)
-
-  // remove listener ที่เพิ่มข้างต้น
-  window.removeEventListener('bookings:changed', () => {
-    loadRecentAndChart()
-    fetchComingSoon()
-    fetchUpcoming()
-  })
-})
-
-async function loadKpi() {
-  debugError.value = ''
-  const date = new Date().toISOString().slice(0,10)
-  const candidates = [
-    ['/api/stats/bookings', { params: { date } }],
-    ['/api/stats', { params: { date } }],
-    ['/api/bookings/stats', { params: { date } }],
-    ['/api/bookings/summary', { params: { date } }],
-    // fallback: get bookings list and compute counts client-side
-    ['/api/bookings', { params: { date, page: 1, pageSize: 200 } }]
-  ]
-
-  let res = null
-  for (const [url, opt] of candidates) {
-    try {
-      res = await api.get(url, opt)
-      if (res?.status === 200) {
-        debugKpiRaw.value = { url, data: res.data }
-        break
-      }
-    } catch (err) {
-      // ไม่ต้องโยน error ให้ user — แค่ log เพื่อช่วยดีบัก
-      console.warn('[Home] KPI try failed', url, err?.response?.status || err.message)
-    }
-  }
-
-  if (!res) {
-    debugError.value = 'ไม่พบ endpoint สำหรับสถิติ (404)'
-    console.error('[Home] loadKpi no endpoint worked')
-    return
-  }
-
-  const d = res.data ?? {}
-
-  // ถ้า endpoint คืนสรุปตรงๆ ให้แมปโดยตรง
-  kpi.value.total = d.totalToday ?? d.total ?? d.count ?? d.all ?? 0
-  kpi.value.approved = d.approved ?? d.approvedCount ?? d.confirmed ?? 0
-  kpi.value.pending = d.pending ?? d.pendingCount ?? d.waiting ?? 0
-  kpi.value.cancelled = d.cancelled ?? d.cancelledCount ?? d.cancelled ?? 0
-
-  // ถ้ได้รายการ bookings มา (fallback) ก็คำนวณบน client
-  if (!kpi.value.total && Array.isArray(d.items || d)) {
-    const items = Array.isArray(d.items) ? d.items : Array.isArray(d) ? d : []
-    kpi.value.total = items.length
-    kpi.value.approved = items.filter(x => x.status === 'APPROVED' || x.status === 'CONFIRMED').length
-    kpi.value.pending = items.filter(x => x.status === 'PENDING' || x.status === 'REQUESTED').length
-    kpi.value.cancelled = items.filter(x => x.status === 'CANCELLED').length
-  }
-
-  deltas.value.approved = d.deltaApproved ?? d.approvedDelta ?? 0
-  deltas.value.pending = d.deltaPending ?? d.pendingDelta ?? 0
-}
-
-// ADD/REPLACE: days + chartData (reuse admin logic)
+/** ===== KPI & Chart ===== */
+const kpi = ref({ total: 0, approved: 0, pending: 0, cancelled: 0 })
+const deltas = ref({ approved: 0, pending: 0 })
 const days = ref(7)
 const chartData = ref([])
 
@@ -693,7 +542,6 @@ function groupByDate(items, daysBack) {
     map.set(d.toISOString().slice(0, 10), { date: d, count: 0 })
   }
   items.forEach(b => {
-    // support multiple start field names
     const s = b.startAt ?? b.startTime ?? b.start ?? b.from
     if (!s) return
     const k = new Date(s)
@@ -714,10 +562,7 @@ async function loadRecentAndChart() {
   try {
     const since = new Date()
     since.setDate(since.getDate() - days.value)
-    // try bookings endpoint; adjust params if backend differs
-    const res = await api.get('/api/bookings', {
-      params: { page: 1, pageSize: 500, start_gte: since.toISOString() }
-    })
+    const res = await api.get('/api/bookings', { params: { page: 1, pageSize: 500, start_gte: since.toISOString() } })
     const list = Array.isArray(res?.data?.items) ? res.data.items : (Array.isArray(res?.data) ? res.data : [])
     chartData.value = groupByDate(list, Math.min(days.value, 30))
   } catch (e) {
@@ -726,44 +571,89 @@ async function loadRecentAndChart() {
   }
 }
 
-// call after mount and when days changes or bookings change
-onMounted(() => {
-  // existing onMounted code runs too; add call
-  loadRecentAndChart()
-  window.addEventListener('bookings:changed', loadRecentAndChart)
-})
-onUnmounted(() => {
-  window.removeEventListener('bookings:changed', loadRecentAndChart)
-})
+/** โหลด KPI: ลองหลาย endpoint+พารามิเตอร์ และ fallback นับเองจาก /api/bookings */
+async function loadKpi() {
+  const now = new Date()
+  const startOfDay = new Date(now); startOfDay.setHours(0,0,0,0)
+  const endOfDay   = new Date(now); endOfDay.setHours(23,59,59,999)
 
-// if days selectable, refresh on change
-watch(days, () => loadRecentAndChart())
+  const paramsCandidates = [
+    { date: startOfDay.toISOString().slice(0,10) },
+    { on:   startOfDay.toISOString().slice(0,10) },
+    { from: startOfDay.toISOString(), to: endOfDay.toISOString() },
+    { start_gte: startOfDay.toISOString(), end_lte: endOfDay.toISOString() },
+    { dateFrom: startOfDay.toISOString().slice(0,10), dateTo: endOfDay.toISOString().slice(0,10) },
+  ]
+  const endpoints = [
+    ['/api/stats/bookings'],
+    ['/api/stats'],
+    ['/api/bookings/stats'],
+    ['/api/bookings/summary'],
+  ]
 
-// ADD: upcoming meetings (7 days)
-const upcoming = ref([])
-const loadingUpcoming = ref(false)
-const comingSoon = ref([]) // <-- สำหรับประชุมที่จะเกิดขึ้นภายใน 24 ชั่วโมง
+  let res = null
+  outer: for (const [url] of endpoints) {
+    for (const p of paramsCandidates) {
+      try {
+        const r = await api.get(url, { params: p })
+        if (r?.status === 200) { res = r; break outer }
+      } catch (_) {}
+    }
+  }
 
-function toISODate(dt) {
-  const d = new Date(dt)
-  return d.toISOString().slice(0,10)
+  if (res?.data) {
+    const d = res.data
+    kpi.value.total     = d.totalToday ?? d.total ?? d.count ?? d.all ?? 0
+    kpi.value.approved  = d.approved ?? d.approvedCount ?? d.confirmed ?? 0
+    kpi.value.pending   = d.pending ?? d.pendingCount ?? d.waiting ?? d.awaiting ?? 0
+    kpi.value.cancelled = d.cancelled ?? d.cancelledCount ?? 0
+    deltas.value.approved = d.deltaApproved ?? d.approvedDelta ?? 0
+    deltas.value.pending  = d.deltaPending  ?? d.pendingDelta  ?? 0
+    return
+  }
+
+  // fallback: ดึงรายการแล้วนับเอง
+  let list = []
+  for (const p of paramsCandidates) {
+    try {
+      const r = await api.get('/api/bookings', { params: { page: 1, pageSize: 500, ...p } })
+      const raw = r?.data?.items ?? r?.data ?? []
+      list = Array.isArray(raw) ? raw : []
+      if (list.length) break
+    } catch (_) {}
+  }
+
+  const inToday = (b) => {
+    const s = new Date(b.startAt ?? b.startTime ?? b.start ?? b.from)
+    if (Number.isNaN(s.getTime())) return false
+    return s >= startOfDay && s <= endOfDay
+  }
+  const items = list.filter(inToday)
+
+  const isApproved = (s) => ['APPROVED','CONFIRMED','ACCEPTED'].includes(String(s||'').toUpperCase())
+  const isPending  = (s) => ['PENDING','REQUESTED','AWAITING_ATTENDEE_CONFIRM','AWAITING'].includes(String(s||'').toUpperCase())
+  const isCancel   = (s) => String(s||'').toUpperCase() === 'CANCELLED'
+
+  kpi.value.total     = items.length
+  kpi.value.approved  = items.filter(x => isApproved(x.status)).length
+  kpi.value.pending   = items.filter(x => isPending(x.status)).length
+  kpi.value.cancelled = items.filter(x => isCancel(x.status)).length
 }
 
+/** Upcoming */
+const upcoming = ref([])
+const loadingUpcoming = ref(false)
+const comingSoon = ref([])
+
+function toISODate(dt) { return new Date(dt).toISOString().slice(0,10) }
 function formatDate(iso) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '-'
-  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()+543}`
+  const m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}`
 }
-function formatDay(iso){
-  const d = new Date(iso); if (Number.isNaN(d.getTime())) return ''
-  return d.getDate()
-}
-function timeRange(s,e){
-  if(!s||!e) return '-'
-  const o = { hour:'2-digit', minute:'2-digit' }
-  return `${new Date(s).toLocaleTimeString('th-TH', o)} - ${new Date(e).toLocaleTimeString('th-TH', o)}`
-}
+function formatDay(iso){ const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.getDate() }
+function timeRange(s,e){ if(!s||!e) return '-'; const o={hour:'2-digit',minute:'2-digit'}; return `${new Date(s).toLocaleTimeString('th-TH',o)} - ${new Date(e).toLocaleTimeString('th-TH',o)}` }
 function statusLabel(s){ if(!s) return 'รอเริ่ม'; if(s==='IN_PROGRESS') return 'กำลังประชุม'; if(s==='DONE') return 'เสร็จสิ้น'; return s }
 function statusClass(s){ if(s==='IN_PROGRESS') return 'bg-green-100 text-green-700'; if(s==='DONE') return 'bg-blue-100 text-blue-700'; return 'bg-amber-100 text-amber-800' }
 
@@ -780,37 +670,27 @@ async function fetchUpcoming() {
       ['/api/bookings', { params: { dateFrom: start, dateTo: end, page: 1, pageSize: 200 } }]
     ]
     let res = null
-    for (const [url, opt] of candidates) {
-      try { res = await api.get(url, opt); if (res?.status === 200) break } catch (e) { res = null }
-    }
+    for (const [url, opt] of candidates) { try { const r = await api.get(url, opt); if (r?.status === 200) { res = r; break } } catch {} }
     if (!res) { upcoming.value = []; return }
-
     const data = res.data?.items ?? res.data ?? []
-    const raw = (Array.isArray(data) ? data : [])
-      .map(it => ({
-        id: it.id,
-        title: it.title || it.room?.name || it.roomName,
-        room: it.room || { roomName: it.roomName },
-        requester: it.requester || it.user || it.owner || {},
-        status: it.status,
-        start: it.startAt ?? it.startTime ?? it.start,
-        end: it.endAt ?? it.endTime ?? it.end
-      }))
-      // only keep events that haven't fully finished (end > now)
-      .filter(i => {
-        if (!i.start) return false
-        const s = new Date(i.start)
-        const e = i.end ? new Date(i.end) : new Date(s.getTime() + 1)
-        return !Number.isNaN(e.getTime()) && e.getTime() > now.getTime()
-      })
-
+    const raw = (Array.isArray(data) ? data : []).map(it => ({
+      id: it.id,
+      title: it.title || it.room?.name || it.roomName,
+      room: it.room || { roomName: it.roomName },
+      requester: it.requester || it.user || it.owner || {},
+      status: it.status,
+      start: it.startAt ?? it.startTime ?? it.start,
+      end: it.endAt ?? it.endTime ?? it.end
+    })).filter(i => {
+      if (!i.start) return false
+      const s = new Date(i.start)
+      const e = i.end ? new Date(i.end) : new Date(s.getTime() + 1)
+      return !Number.isNaN(e.getTime()) && e.getTime() > now.getTime()
+    })
     upcoming.value = raw
   } catch (e) {
-    console.error('fetchUpcoming', e)
-    upcoming.value = []
-  } finally {
-    loadingUpcoming.value = false
-  }
+    console.error('fetchUpcoming', e); upcoming.value = []
+  } finally { loadingUpcoming.value = false }
 }
 
 async function fetchComingSoon() {
@@ -818,7 +698,7 @@ async function fetchComingSoon() {
   try {
     const now = new Date()
     const start = toISODate(now)
-    const endWindow = new Date(now); endWindow.setDate(now.getDate() + 7) // <-- 7 วันข้างหน้า
+    const endWindow = new Date(now); endWindow.setDate(now.getDate() + 7)
     const end = toISODate(endWindow)
     const candidates = [
       ['/api/bookings', { params: { from: start, to: end, page: 1, pageSize: 200 } }],
@@ -826,36 +706,64 @@ async function fetchComingSoon() {
       ['/api/bookings', { params: { dateFrom: start, dateTo: end, page: 1, pageSize: 200 } }]
     ]
     let res = null
-    for (const [url, opt] of candidates) {
-      try { res = await api.get(url, opt); if (res?.status === 200) break } catch (e) { res = null }
-    }
+    for (const [url, opt] of candidates) { try { const r = await api.get(url, opt); if (r?.status === 200) { res = r; break } } catch {} }
     if (!res) { comingSoon.value = []; return }
-
     const data = res.data?.items ?? res.data ?? []
-    comingSoon.value = (Array.isArray(data) ? data : [])
-      .map(it => ({
-        id: it.id,
-        title: it.title || it.room?.name || it.roomName,
-        room: it.room || { roomName: it.roomName },
-        requester: it.requester || it.user || it.owner || {},
-        status: it.status,
-        start: it.startAt ?? it.startTime ?? it.start,
-        end: it.endAt ?? it.endTime ?? it.end
-      }))
-      // keep only events that haven't finished AND start <= now+7days
-      .filter(i => {
-        if (!i.start) return false
-        const s = new Date(i.start)
-        const e = i.end ? new Date(i.end) : new Date(s.getTime() + 1)
-        return !Number.isNaN(e.getTime()) && e.getTime() > now.getTime() && s.getTime() <= endWindow.getTime()
-      })
+    comingSoon.value = (Array.isArray(data) ? data : []).map(it => ({
+      id: it.id,
+      title: it.title || it.room?.name || it.roomName,
+      room: it.room || { roomName: it.roomName },
+      requester: it.requester || it.user || it.owner || {},
+      status: it.status,
+      start: it.startAt ?? it.startTime ?? it.start,
+      end: it.endAt ?? it.endTime ?? it.end
+    })).filter(i => {
+      if (!i.start) return false
+      const s = new Date(i.start)
+      const e = i.end ? new Date(i.end) : new Date(s.getTime() + 1)
+      return !Number.isNaN(e.getTime()) && e.getTime() > now.getTime() && s.getTime() <= endWindow.getTime()
+    })
   } catch (e) {
-    console.error('fetchComingSoon', e)
-    comingSoon.value = []
-  } finally {
-    loadingUpcoming.value = false
-  }
+    console.error('fetchComingSoon', e); comingSoon.value = []
+  } finally { loadingUpcoming.value = false }
 }
+
+/** ===== lifecycle ===== */
+let clockTimer = null
+let notiTimer = null
+let kpiTimer = null
+
+const onBookingsChanged = () => {
+  loadRecentAndChart()
+  fetchComingSoon()
+  fetchUpcoming()
+  loadKpi()
+}
+
+onMounted(async () => {
+  updateDateTime()
+  clockTimer = setInterval(updateDateTime, 1000)
+
+  await fetchMe()
+  await fetchNotifications()
+  notiTimer = setInterval(fetchNotifications, 30000)
+  document.addEventListener('click', handleClickOutside)
+
+  await Promise.all([loadRecentAndChart(), fetchComingSoon(), fetchUpcoming(), loadKpi()])
+  window.addEventListener('bookings:changed', onBookingsChanged)
+
+  kpiTimer = setInterval(loadKpi, 60000)
+})
+
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
+  if (notiTimer) clearInterval(notiTimer)
+  if (kpiTimer) clearInterval(kpiTimer)
+  document.removeEventListener('click', handleClickOutside)
+  window.removeEventListener('bookings:changed', onBookingsChanged)
+})
+
+watch(days, () => loadRecentAndChart())
 </script>
 
 <style scoped>

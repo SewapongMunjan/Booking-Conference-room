@@ -328,6 +328,7 @@ router.patch("/availability/unavailable", auth, requireNoteRole, async (req: any
     if (!nt) return res.status(403).json({ error: "NOT_NOTE_TAKER" });
 
     await prisma.$transaction(async (tx) => {
+      // 1) เปลี่ยนสถานะของฉันบน booking นี้
       await tx.bookingNoteTaker.updateMany({
         where: { bookingId, userId: meId },
         data: { status: NoteQueueStatus.REPLACED },
@@ -336,6 +337,20 @@ router.patch("/availability/unavailable", auth, requireNoteRole, async (req: any
         where: { bookingId, userId: meId },
         data: { status: InviteStatus.DECLINED },
       });
+
+      // 2) สร้างบันทึก "ลากะทันหัน" ในวันประชุมนั้น (ถ้ายังไม่มี)
+      const booking = await tx.booking.findUnique({
+        where: { id: bookingId },
+        select: { startTime: true },
+      });
+      if (booking?.startTime) {
+        const day = atDate(booking.startTime);
+        await (tx as any).noteTakerLeave.upsert({
+          where: { userId_date: { userId: meId, date: day as any } },
+          update: { reason: "Emergency leave (auto)" },
+          create: { userId: meId, date: day as any, reason: "Emergency leave (auto)" },
+        });
+      }
     });
 
     res.json({ ok: true });
@@ -487,9 +502,9 @@ router.get("/leaves/pending", auth, requireNoteManagerOrAdmin, async (req, res) 
         if (!leaveIds || leaveIds.size === 0) return null;
 
         const affected = (b.noteTakers || []).filter(nt =>
-          leaveIds.has(nt.userId) &&
-          (nt.status === "ACCEPTED" || nt.status === "INVITED")
-        );
+  leaveIds.has(nt.userId) &&
+  (nt.status === "ACCEPTED" || nt.status === "INVITED" || nt.status === "REPLACED")
+);
 
         if (affected.length === 0) return null;
 

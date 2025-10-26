@@ -94,50 +94,35 @@
 
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- รายการห้อง -->
-            <div class="modern-card">
-              <h2 class="text-lg font-semibold mb-4">รายการห้อง</h2>
-              <div v-if="loading" class="text-sm text-gray-500">กำลังโหลด...</div>
-              <div v-else class="space-y-3">
-                <div v-for="room in filteredRooms" :key="room.id" class="p-3 border border-gray-100 rounded-lg">
-                  <div class="flex items-start justify-between gap-3">
-                    <div>
-                      <div class="font-semibold">{{ room.name }}</div>
-                      <div class="text-xs text-gray-500">{{ room.timeRange }}</div>
-                      <div class="mt-1 text-xs">
-                        ผู้เข้าร่วม(ยืนยัน): <b>{{ room.confirmed }}</b>
-                        <span class="text-gray-500"> / เชิญทั้งหมด: {{ room.invitedTotal }}</span>
-                      </div>
-                      <div class="mt-1 text-xs text-gray-700">
-                        บริการ:
-                        <span v-if="room.services.length===0" class="text-gray-500">-</span>
-                        <span v-else>{{ room.services.join(', ') }}</span>
-                      </div>
-                      <div v-if="room.tasks?.length" class="mt-2 text-xs text-gray-600">
-                        งาน: <span class="font-medium">{{ room.tasks.length }}</span>
-                      </div>
-                    </div>
+            <section class="modern-card">
+  <div class="flex items-center justify-between mb-3">
+    <h3 class="font-semibold">แผงลัด & โน้ตเวร</h3>
+    <span v-if="quickSavedAt" class="text-xs text-gray-500">
+      บันทึกล่าสุด: {{ timeTH(quickSavedAt) }}
+    </span>
+  </div>
 
-                    <div class="text-right">
-                      <div class="text-xs text-gray-400">{{ room.location || '' }}</div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- ทางลัด -->
+    <div class="space-y-2">
+      <button class="w-full px-3 py-2 rounded-lg border hover:bg-gray-50"
+              @click="goAllTasks">ดูงานทั้งหมด</button>
+      <button class="w-full px-3 py-2 rounded-lg border hover:bg-gray-50"
+              @click="triggerRefresh">รีโหลดข้อมูล</button>
+      <button class="w-full px-3 py-2 rounded-lg border hover:bg-gray-50"
+              @click="printChecklist">พิมพ์เช็กลิสต์</button>
+    </div>
 
-                      <!-- ถ้าทุกงานเสร็จ -> โชว์ป้าย / ถ้ายังมีงานค้าง -> โชว์ปุ่ม -->
-                      <span
-                        v-if="isRoomDone(room)"
-                        class="inline-block mt-2 px-2 py-1 rounded-full bg-green-50 text-green-700 text-xs"
-                      >
-                        เสร็จสิ้นแล้ว
-                      </span>
-                      <button
-                        v-else
-                        @click="markRoomDone(room)"
-                        class="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm">
-                        ทำเสร็จ
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+    <!-- โน้ตเวรวันนี้ -->
+    <div>
+      <label class="block text-sm text-gray-600 mb-1">โน้ตเวรวันนี้</label>
+      <textarea rows="6" v-model="quickNote" @input="saveQuickNote"
+        class="w-full p-2 border rounded-md"
+        placeholder="จดสิ่งที่ต้องระวัง อุปกรณ์ขาด ของเสีย ฯลฯ"></textarea>
+      <div class="text-xs text-gray-500 mt-1">เก็บไว้ในเครื่อง (local)</div>
+    </div>
+  </div>
+</section>
 
             <!-- งานด่วน -->
             <div class="modern-card">
@@ -185,6 +170,8 @@ import api from '@/lib/api.js'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 
+const quickNote = ref(localStorage.getItem('hk:quick-note') || '')
+const quickSavedAt = ref(Number(localStorage.getItem('hk:quick-note:ts') || 0))
 const router = useRouter()
 const route = useRoute()
 const me = ref(null)
@@ -257,6 +244,35 @@ function fmtRange(startISO, endISO){
   const pad = n => String(n).padStart(2,'0')
   const th = (d)=> `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()+543} ${pad(d.getHours())}:${pad(d.getMinutes())}`
   return `${th(a)} - ${th(b)}`
+}
+
+function saveQuickNote() {
+  quickSavedAt.value = Date.now()
+  localStorage.setItem('hk:quick-note', quickNote.value)
+  localStorage.setItem('hk:quick-note:ts', String(quickSavedAt.value))
+}
+function timeTH(ts) {
+  if (!ts) return '-'
+  const d = new Date(ts); if (Number.isNaN(d.getTime())) return '-'
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+function goAllTasks() {
+  // ไปหน้ารวมงานแม่บ้าน (ปรับ path ตาม route จริง ถ้าใช้ชื่ออื่น)
+  router.push('/housekeeping/tasks')
+}
+
+function triggerRefresh() {
+  // แจ้งทุกแท็บให้รีโหลด (แดชบอร์ดคุณฟัง hk:task-updated อยู่แล้ว)
+  localStorage.setItem('hk:task-updated', String(Date.now()))
+  // กระตุ้นให้หน้าปัจจุบันรีเฟรชข้อมูล (ถ้ามี onfocus handler)
+  window.dispatchEvent(new Event('focus'))
+}
+
+function printChecklist() {
+  // ใช้พิมพ์หน้าปัจจุบัน (หรือจะเปิดหน้ารายการงานก่อนก็ได้)
+  window.print()
 }
 
 // เติมจำนวนผู้ยืนยัน/เชิญทั้งหมด จาก /api/bookings/:id

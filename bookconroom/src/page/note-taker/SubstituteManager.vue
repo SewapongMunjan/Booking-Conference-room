@@ -40,7 +40,7 @@
         <div class="ml-auto flex items-center gap-3">
           <div class="hidden md:flex items-center gap-2">
             <label class="text-sm text-gray-600">เลือกวันที่</label>
-            <input type="date" v-model="selectedDate" class="border rounded-lg px-2 py-1 text-sm" @change="onChangeDate" />
+            <input type="date" v-model="selectedDate" class="border rounded-lg px-2 py-1 text-sm" @change="loadCompat" />
           </div>
 
           <div class="relative hidden sm:block">
@@ -48,7 +48,7 @@
             <input v-model="q" placeholder="ค้นหา ห้อง / ผู้จด..." class="w-64 pl-10 pr-3 py-2 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
 
-          <button class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="load(selectedDate)">รีเฟรช</button>
+          <button class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="loadAll">รีเฟรช</button>
           <button @click="logout" class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm border border-gray-200 hover:bg-gray-50">
             <svg class="w-5 h-5 text-red-600 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1"/></svg>
             <span class="hidden md:inline text-red-600">ออกจากระบบ</span>
@@ -70,8 +70,8 @@
 
             <div v-if="loading" class="text-gray-500">กำลังโหลด...</div>
             <div v-else-if="filtered.length === 0" class="text-gray-500">
-              ไม่มีรายการในวันที่เลือก
-              <div class="text-xs text-gray-400 mt-1">* เลือกวันที่ให้ตรงกับวันที่ลาที่เห็นใน “ลาล่วงหน้า”</div>
+              ไม่มีรายการในช่วงนี้
+              <div class="text-xs text-gray-400 mt-1">* ระบบจะแสดงงานที่ต้องหาแทนย้อนหลัง/ล่วงหน้า 30 วัน</div>
             </div>
 
             <ul class="space-y-3" v-else>
@@ -135,60 +135,181 @@ const q = ref('')
 const loading = ref(true)
 const fetchError = ref('')
 
-const requests = ref([])   // จาก /api/notetakers/leaves/pending (ของทุกคนในวันนั้น)
+const requests = ref([])   // งานที่ต้องหา “ผู้จดแทน”
 const me = ref({ name: '', email: '', avatarUrl: '' })
 
-// วันที่ที่จะดึง "pending" (ค่าเริ่มต้น = วันนี้)
+// แสดง date picker ไว้เฉย ๆ (ใช้ตอน fallback)
 const selectedDate = ref(new Date().toISOString().slice(0,10))
 
 // modal เลือกผู้แทน
 const showAssign = ref(false)
 const currentReq = ref(null)
-const candidates = ref([])          // /api/notetakers/candidates
+const candidates = ref([])
 const candidateError = ref('')
 const selectedTaker = ref('')
 const assigning = ref(false)
 
 // ===== computed / helpers =====
- //แสดงทุกงานที่ต้องหา “ผู้จดแทน” ตั้งแต่แรก (ไม่ฟิลเตอร์ด้วย q)
-const filtered = computed(() => Array.isArray(requests.value) ? requests.value : [])
+const filtered = computed(() => {
+  const kw = q.value.trim().toLowerCase()
+  let arr = Array.isArray(requests.value) ? requests.value : []
+  if (!kw) return arr
+  return arr.filter(s =>
+    (s.room?.roomName || '').toLowerCase().includes(kw) ||
+    (s.unavailableUsers || []).some(u => (u.fullName || '').toLowerCase().includes(kw))
+  )
+})
+
+const takers = computed(() => {
+  // เรียงตามคิว orderNo ถ้ามี
+  const arr = (candidates.value || []).slice().sort((a,b) => (a.orderNo||9999) - (b.orderNo||9999))
+  return arr.map(c => ({
+    id: c.userId,
+    name: c.user?.fullName || `User #${c.userId}`,
+  }))
+})
 
 function timeRange(s,e){
   if(!s||!e) return '-'
   const o={hour:'2-digit',minute:'2-digit'}
-  return `${new Date(s).toLocaleTimeString([],o)} - ${new Date(e).toLocaleTimeString([],o)}`
+  const d1 = new Date(s); const d2 = new Date(e)
+  const sameDay = d1.toDateString() === d2.toDateString()
+  const dateStr = d1.toLocaleDateString()
+  const rangeStr = `${d1.toLocaleTimeString([],o)} - ${d2.toLocaleTimeString([],o)}`
+  return sameDay ? `${dateStr} ${rangeStr}` : `${d1.toLocaleString([],o)} ➜ ${d2.toLocaleString([],o)}`
 }
-function toISO(d){ return new Date(d).toISOString() }
+function toISO(x){
+  const d = new Date(x)
+  return isNaN(d.getTime()) ? '' : d.toISOString()
+}
+
+/* ============ FIX: fetchMe() รองรับหลาย endpoint ============ */
+async function fetchMe() {
+  const tryPaths = ['/api/auth/me', '/api/users/me', '/api/me']
+  for (const p of tryPaths) {
+    try {
+      const { data } = await api.get(p)
+      if (data) { me.value = data; return }
+    } catch (e) {
+      // เงียบไว้ถ้า 404 / 401 แล้วลอง path ถัดไป
+    }
+  }
+}
+/* ============================================================= */
 
 // ===== API =====
+const WINDOW_DAYS = 30
+
+function aroundTodayRangeISO(days = WINDOW_DAYS) {
+  const now = new Date()
+  const half = Math.floor(days/2)
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - half)
+  const end   = new Date(now.getFullYear(), now.getMonth(), now.getDate() + half + 1)
+  return { start: start.toISOString(), end: end.toISOString() }
+}
+function dayRangeISO(dStr) {
+  const d = new Date(dStr)
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const end = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1)
+  return { start: start.toISOString(), end: end.toISOString() }
+}
+function synthesizePendingFromBookings(bookings) {
+  const DECLINE = new Set(['REJECTED', 'DECLINED'])
+  const LEAVE_LIKE = new Set(['EMERGENCY', 'URGENT', 'SICK'])
+  const OK_SUB = new Set(['ACCEPTED', 'APPROVED'])
+  const pendings = []
+  for (const b of bookings || []) {
+    const room = b.room || b.meetingRoom || {}
+    const invites = Array.isArray(b.invites) ? b.invites : []
+    const takers  = Array.isArray(b.noteTakers) ? b.noteTakers : []
+    const unavailable = invites.filter(iv => {
+      const status = String(iv.status || '').toUpperCase()
+      const leaveType = String(iv.leaveType || '').toUpperCase()
+      return DECLINE.has(status) || LEAVE_LIKE.has(leaveType)
+    })
+    if (unavailable.length === 0) continue
+    const hasAcceptedSub = takers.some(t => OK_SUB.has(String(t.status || '').toUpperCase()))
+    if (hasAcceptedSub) continue
+    pendings.push({
+      id: b.id,
+      room: { roomName: room.roomName || room.name || '-' },
+      startTime: b.startTime,
+      endTime: b.endTime,
+      unavailableUsers: unavailable.map(u => ({
+        id: u.userId || u.id,
+        fullName: u.fullName || u.name || `User#${u.userId || u.id}`,
+      })),
+    })
+  }
+  return pendings
+}
+
 async function loadAll() {
   loading.value = true
   fetchError.value = ''
   try {
-    const { data } = await api.get('/api/notetakers/leaves/pending', { params: { all: 1, days: 30 } })
-    requests.value = Array.isArray(data?.items) ? data.items : []
-    try { const u = await api.get('/api/me'); me.value = u.data || me.value } catch (_) {}
+    // ถ้ามี endpoint leaves/pending ใช้ก่อน
+    const r = await api.get('/api/notetakers/leaves/pending', { params: { all: 1, days: WINDOW_DAYS } })
+    let items = Array.isArray(r.data?.items) ? r.data.items : []
+    if (items.length === 0) {
+      // FIX: /api/bookings ให้ใช้ from/to แทน start/end
+      const { start, end } = aroundTodayRangeISO(WINDOW_DAYS)
+      const r2 = await api.get('/api/bookings', { params: { from: start, to: end, page: 1, pageSize: 500 } })
+      const bookings = Array.isArray(r2.data?.items) ? r2.data.items : []
+      items = synthesizePendingFromBookings(bookings)
+    }
+    requests.value = items
+    await fetchMe()
   } catch (e) {
-    console.error('load pending', e)
-    fetchError.value = e?.response?.data?.error || e.message || 'load failed'
+    await loadCompat()
   } finally {
     loading.value = false
   }
 }
 
-function onChangeDate(){ /* โหมด all: ไม่ต้องทำอะไรแล้ว หรือจะเรียก loadAll() เพื่อรีเฟรชก็ได้ */ }
+async function loadCompat() {
+  loading.value = true
+  fetchError.value = ''
+  try {
+    const params = { date: selectedDate.value }
+    const r = await api.get('/api/notetakers/leaves/pending', { params })
+    let items = Array.isArray(r.data?.items) ? r.data.items : []
+    if (items.length === 0) {
+      // FIX: /api/bookings ให้ใช้ from/to แทน start/end
+      const { start, end } = dayRangeISO(selectedDate.value)
+      const r2 = await api.get('/api/bookings', { params: { from: start, to: end, page: 1, pageSize: 500 } })
+      const bookings = Array.isArray(r2.data?.items) ? r2.data.items : []
+      items = synthesizePendingFromBookings(bookings)
+    }
+    requests.value = items
+    await fetchMe()
+  } catch (e) {
+    fetchError.value = e?.response?.data?.error || e.message || 'load failed'
+    requests.value = []
+  } finally {
+    loading.value = false
+  }
+}
 
 async function loadCandidates(startIso, endIso, excludeIds = []) {
   candidateError.value = ''
   candidates.value = []
   try {
-    const params = { start: startIso, end: endIso }
+    // FIX: ส่ง mode='note' ชัดเจน + excludeIds
+    const params = { start: startIso, end: endIso, mode: 'note' }
     if (excludeIds?.length) params.excludeIds = excludeIds.join(',')
     const res = await api.get('/api/notetakers/candidates', { params })
-    candidates.value = res.data?.items ?? res.data ?? []
+    // รองรับทั้ง {items:[]} และ [] ตรงๆ
+    let items = res.data?.items ?? res.data ?? []
+    if (!Array.isArray(items)) items = []
+    // กันกรณีคืนว่างเพราะ BAD_TIME_RANGE
+    if (items.length === 0 && (!startIso || !endIso)) {
+      throw new Error('BAD_TIME_RANGE')
+    }
+    candidates.value = items
   } catch (e) {
-    console.error('loadCandidates', e)
-    candidateError.value = e?.response?.data?.error || e?.message || 'โหลดผู้แทนไม่ได้'
+    const err = e?.response?.data?.error || e?.message || 'โหลดผู้แทนไม่ได้'
+    candidateError.value = err
   }
 }
 
@@ -220,10 +341,9 @@ async function assign() {
       substituteUserId: Number(selectedTaker.value),
     })
     Swal.fire({ icon: 'success', title: 'เปลี่ยนผู้จดแล้ว' })
-    await load(selectedDate.value)
+    await loadAll()
     closeAssign()
   } catch (e) {
-    console.error('assign failed', e)
     fetchError.value = e?.response?.data?.error || e.message || 'assign failed'
     Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ' })
   } finally {
@@ -238,9 +358,7 @@ async function logout() {
   router.push('/login')
 }
 
-onMounted(() => {
-  loadAll() // โหลดทุกรายการ (all mode)
-})
+onMounted(() => { loadAll() })
 </script>
 
 <style scoped>

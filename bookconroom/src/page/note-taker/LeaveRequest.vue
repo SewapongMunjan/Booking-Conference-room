@@ -24,7 +24,7 @@
           <div class="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
             <img :src="me?.avatarUrl || 'https://cdn-icons-png.flaticon.com/128/456/456283.png'" class="w-9 h-9 rounded-lg" />
             <div class="flex-1 min-w-0">
-              <div class="font-medium text-xs text-gray-900 truncate">{{ me?.name || 'NoteTaker' }}</div>
+              <div class="font-medium text-xs text-gray-900 truncate">{{ me?.name || me?.fullName || 'NoteTaker' }}</div>
               <div class="text-[10px] text-gray-500 truncate">{{ me?.email || '' }}</div>
             </div>
           </div>
@@ -218,12 +218,32 @@ const loading = ref(true)
 const leaves = ref([])
 const requests = ref([])
 const fetchError = ref('')
-const me = ref({ name: '', email: '', avatarUrl: '' })
+const me = ref({ id: undefined, name: '', fullName: '', email: '', avatarUrl: '' })
 
-// NEW: tasks today for emergency mode
-const tasksToday = ref([])
+// tasks today for emergency mode
+const tasksToday = ref([])   // [{id, title, startTime, endTime, roomName, timeRange, bookingId}]
 const tasksLoading = ref(false)
-const selectedTasks = ref([])
+const selectedTasks = ref([])  // [bookingId]
+
+/* ---- user/me ---- */
+async function fetchMe(){
+  const tryPaths = ['/api/auth/me','/api/users/me','/api/me']
+  for (const p of tryPaths) {
+    try {
+      const { data } = await api.get(p)
+      if (data) {
+        me.value = {
+          id: data.id ?? data.userId ?? data.sub,
+          name: data.name ?? data.fullName ?? me.value.name,
+          fullName: data.fullName ?? data.name ?? me.value.fullName,
+          email: data.email ?? me.value.email,
+          avatarUrl: data.avatarUrl ?? me.value.avatarUrl
+        }
+        return
+      }
+    } catch(_) {}
+  }
+}
 
 const todayISO = computed(() => {
   const d = new Date(); d.setHours(0,0,0,0)
@@ -274,7 +294,7 @@ function leaveStatusTH(s){
   if (s === 'PENDING') return 'รออนุมัติ'
   if (s === 'APPROVED') return 'อนุมัติแล้ว'
   if (s === 'REJECTED') return 'ไม่อนุมัติ'
-  return 'อนุมัติแล้ว' // ค่าเริ่มต้นของ leave รายวัน
+  return 'อนุมัติแล้ว'
 }
 function leaveBadge(s){
   if (s === 'PENDING') return 'bg-amber-100 text-amber-800'
@@ -304,11 +324,68 @@ const filteredLeaves = computed(() => {
   )
 })
 
-// ========== API calls ==========
+/* ---------- ดึง "งานวันนี้ของฉัน" จาก assignments ---------- */
+function dayRangeISO(dStr) {
+  const d = new Date(dStr)
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
+  const end = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1, 0, 0, 0, 0)
+  return { start: start.toISOString(), end: end.toISOString() }
+}
+
+function mkTimeRange(s,e){
+  if(!s||!e) return ''
+  const opt={hour:'2-digit',minute:'2-digit'}
+  const d1=new Date(s), d2=new Date(e)
+  const sameDay = d1.toDateString()===d2.toDateString()
+  const dateStr = d1.toLocaleDateString()
+  const rangeStr = `${d1.toLocaleTimeString([],opt)} - ${d2.toLocaleTimeString([],opt)}`
+  return sameDay ? `${dateStr} ${rangeStr}` : `${d1.toLocaleString([],opt)} ➜ ${d2.toLocaleString([],opt)}`
+}
+
+async function fetchTodayTasks(){
+  tasksLoading.value = true
+  tasksToday.value = []
+  selectedTasks.value = []
+  try {
+    // ต้องมี me.id เพื่อกรองงานของฉัน
+    if (!me.value?.id) await fetchMe()
+    const { start, end } = dayRangeISO(todayISO.value)
+    const res = await api.get('/api/notetakers/assignments', { params: { start, end, withUsers: 1 } })
+    const items = Array.isArray(res?.data?.items) ? res.data.items : []
+    // กรองเฉพาะงานที่มีชื่อฉันอยู่ใน noteTakers
+    const mine = items.filter(b => (b.noteTakers||[]).some(nt => Number(nt.user?.id ?? nt.userId) === Number(me.value.id)))
+    tasksToday.value = mine.map(b => ({
+      id: b.id,
+      bookingId: b.id,
+      title: b.room?.roomName ? `ห้อง ${b.room.roomName}` : `Booking #${b.id}`,
+      startTime: b.startTime,
+      endTime: b.endTime,
+      roomName: b.room?.roomName ?? '',
+      timeRange: mkTimeRange(b.startTime, b.endTime),
+    }))
+  } catch (e) {
+    console.warn('fetchTodayTasks', e)
+    tasksToday.value = []
+  } finally {
+    tasksLoading.value = false
+  }
+}
+
+// when emergency toggled on, load today's tasks automatically
+watch(isEmergency, (v) => {
+  if (v) fetchTodayTasks()
+  else {
+    tasksToday.value = []
+    selectedTasks.value = []
+  }
+})
+
+/* ========== โหลด Leaves + Requests + Me ========== */
 async function load(){
   loading.value = true
   fetchError.value = ''
   try{
+    await fetchMe()
     // default: ย้อนหลัง 60 วัน ถึง อีก 60 วัน
     const today = new Date()
     const start = new Date(today); start.setDate(start.getDate() - 60)
@@ -321,15 +398,65 @@ async function load(){
 
     leaves.value   = Array.isArray(leRes.data?.items) ? leRes.data.items : []
     requests.value = Array.isArray(reqRes.data?.items) ? reqRes.data.items : []
-
-    // โปรไฟล์ (optional)
-    try { const u = await api.get('/api/me'); me.value = u.data?.me || u.data || me.value } catch(_) {}
   } catch(e){
     console.error('load leaves', e)
     fetchError.value = e?.response?.data?.error || e.message || 'load failed'
   } finally { loading.value = false }
 }
 
+/** ส่งลาแบบช่วงวัน → แปลงเป็น daily leave: POST /api/notetakers/leaves ทีละวัน
+ *  ถ้าเป็น "ฉุกเฉิน" และเลือกงานไว้ จะสร้าง /requests สำหรับแต่ละงานด้วย
+ */
+async function submitLeave(){
+  if (!canSubmit.value) {
+    await Swal.fire({ icon:'warning', title:'ข้อมูลไม่ครบหรือวันที่ไม่ถูกต้อง', text: 'กรุณากรอกวันที่และเหตุผลให้ถูกต้องตามเงื่อนไข' })
+    return
+  }
+
+  submitting.value = true
+  try{
+    const toVal = to.value || from.value
+    // 1) บันทึก leave รายวัน
+    for (const d of eachDate(from.value, toVal)) {
+      await api.post('/api/notetakers/leaves', {
+        date: d,
+        reason: reason.value,
+        emergency: !!isEmergency.value,
+      })
+    }
+
+    // 2) สำหรับฉุกเฉิน: ถ้าเลือกงานวันนี้ไว้ ให้สร้างคำขอหา "คนแทน" เชื่อม bookingId
+    if (isEmergency.value && selectedTasks.value.length) {
+      const byId = Object.fromEntries(tasksToday.value.map(t => [t.id, t]))
+      for (const tid of selectedTasks.value) {
+        const t = byId[tid]
+        if (!t) continue
+        await api.post('/api/notetakers/requests', {
+          start: t.startTime,
+          end: t.endTime,
+          bookingId: t.bookingId,
+          // targetUserId: ไม่จำเป็นต้องใส่ ให้ระบบไปหา candidate ตามคิว/เงื่อนไข
+        })
+      }
+      // แจ้งให้หน้า Substitute Manager รีโหลด
+      window.dispatchEvent(new Event('notetakers:requests:changed'))
+    }
+
+    // reset form
+    from.value = ''; to.value = ''; reason.value = ''; isEmergency.value = false
+    tasksToday.value = []; selectedTasks.value = []
+    await load()
+    Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ส่งคำลาแล้ว', timer:1400, showConfirmButton:false })
+  } catch(e){
+    console.error('submit leave', e)
+    fetchError.value = e?.response?.data?.error || e.message || 'submit failed'
+    await Swal.fire({ icon:'error', title:'ส่งไม่สำเร็จ', text: fetchError.value })
+  } finally {
+    submitting.value = false
+  }
+}
+
+/* ---------- New Request (manual) ---------- */
 async function newRequest(){
   const today = new Date(); today.setHours(0,0,0,0)
   const minDate = yyyy_mm_dd(today)
@@ -359,73 +486,14 @@ async function newRequest(){
   try{
     await api.post('/api/notetakers/requests', { start: formValues.start, end: formValues.end })
     Swal.fire({ icon: 'success', title: 'ส่งคำขอแล้ว' })
-    // refresh local requests list
     const res = await api.get('/api/notetakers/requests')
     requests.value = res.data?.items || []
-    // notify other parts of the app (SubstituteManager) to reload
     window.dispatchEvent(new Event('notetakers:requests:changed'))
   }catch(e){
     console.error('newRequest', e)
     Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ', text: e?.response?.data?.error || e?.message })
   }
 }
-
-/** ส่งลาแบบช่วงวัน → แปลงเป็น daily leave: POST /api/notetakers/leave ทีละวัน */
-async function submitLeave(){
-  if (!canSubmit.value) {
-    await Swal.fire({ icon:'warning', title:'ข้อมูลไม่ครบหรือวันที่ไม่ถูกต้อง', text: 'กรุณากรอกวันที่และเหตุผลให้ถูกต้องตามเงื่อนไข' })
-    return
-  }
-
-  submitting.value = true
-  try{
-    const toVal = to.value || from.value
-    for (const d of eachDate(from.value, toVal)) {
-      await api.post('/api/notetakers/leave', {
-        date: d,
-        reason: reason.value,
-        emergency: !!isEmergency.value,
-        affectedTasks: isEmergency.value ? selectedTasks.value : undefined
-      })
-    }
-    from.value = ''; to.value = ''; reason.value = ''; isEmergency.value = false
-    tasksToday.value = []; selectedTasks.value = []
-    await load()
-    Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ส่งคำลาแล้ว', timer:1400, showConfirmButton:false })
-  } catch(e){
-    console.error('submit leave', e)
-    fetchError.value = e?.response?.data?.error || e.message || 'submit failed'
-    await Swal.fire({ icon:'error', title:'ส่งไม่สำเร็จ', text: fetchError.value })
-  } finally {
-    submitting.value = false
-  }
-}
-
-async function fetchTodayTasks(){
-  tasksLoading.value = true
-  tasksToday.value = []
-  selectedTasks.value = []
-  try {
-    // placeholder endpoint - adjust if backend differs
-    const res = await api.get('/api/notetakers/tasks', { params: { date: todayISO.value } })
-    const items = res?.data?.items ?? res?.data ?? []
-    tasksToday.value = Array.isArray(items) ? items : []
-  } catch (e) {
-    console.warn('fetchTodayTasks', e)
-    tasksToday.value = []
-  } finally {
-    tasksLoading.value = false
-  }
-}
-
-// when emergency toggled on, load today's tasks automatically
-watch(isEmergency, (v) => {
-  if (v) fetchTodayTasks()
-  else {
-    tasksToday.value = []
-    selectedTasks.value = []
-  }
-})
 
 async function cancelLeave(dateIso){
   const ok = await Swal.fire({
@@ -438,14 +506,13 @@ async function cancelLeave(dateIso){
   if (!ok.isConfirmed) return
 
   try {
-    // normalize to YYYY-MM-DD because backend expects date only (no time)
+    // ส่งแบบ YYYY-MM-DD ตาม backend
     let dateParam = dateIso
     const dt = new Date(dateIso)
     if (!Number.isNaN(dt.getTime())) {
       dateParam = yyyy_mm_dd(dt)
     }
-
-    await api.delete('/api/notetakers/leave', { params: { date: dateParam } })
+    await api.delete('/api/notetakers/leaves', { params: { date: dateParam } })
     await load()
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'ยกเลิกแล้ว', timer: 1200, showConfirmButton: false })
   } catch (e) {

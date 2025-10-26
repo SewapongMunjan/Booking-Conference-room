@@ -332,21 +332,30 @@
                     </div>
 
                     <!-- Actions -->
-                    <div v-if="inv.status === 'INVITED'" class="flex items-center gap-2 mt-3">
+                    <div class="flex flex-wrap items-center gap-2 mt-3">
                       <button
-                        class="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 transition-all font-medium disabled:opacity-50"
-                        :disabled="actingId === inv.id"
-                        @click="accept(inv)"
+                        class="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 transition-all font-medium"
+                        @click="viewDetail(inv)"
                       >
-                        ✓ ยืนยันเข้าประชุม
+                        ℹ️ รายละเอียด
                       </button>
-                      <button
-                        class="px-4 py-2 text-sm rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-all font-medium disabled:opacity-50"
-                        :disabled="actingId === inv.id"
-                        @click="decline(inv)"
-                      >
-                        ✕ ปฏิเสธ
-                      </button>
+
+                      <template v-if="inv.status === 'INVITED'">
+                        <button
+                          class="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 transition-all font-medium disabled:opacity-50"
+                          :disabled="actingId === inv.id"
+                          @click="accept(inv)"
+                        >
+                          ✓ ยืนยันเข้าประชุม
+                        </button>
+                        <button
+                          class="px-4 py-2 text-sm rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-all font-medium disabled:opacity-50"
+                          :disabled="actingId === inv.id"
+                          @click="decline(inv)"
+                        >
+                          ✕ ปฏิเสธ
+                        </button>
+                      </template>
                     </div>
                   </div>
                 </div>
@@ -355,9 +364,9 @@
 
             <!-- Pagination -->
             <div v-if="totalPages > 1" class="mt-6 flex items-center justify-center gap-2">
-              <button 
-                class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all" 
-                :disabled="page===1" 
+              <button
+                class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                :disabled="page===1"
                 @click="page--; fetchInvites()"
               >
                 ← ก่อนหน้า
@@ -365,9 +374,9 @@
               <span class="px-4 py-2 text-sm text-gray-600">
                 หน้า <strong>{{ page }}</strong> / {{ totalPages }}
               </span>
-              <button 
-                class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all" 
-                :disabled="page===totalPages" 
+              <button
+                class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                :disabled="page===totalPages"
                 @click="page++; fetchInvites()"
               >
                 ถัดไป →
@@ -466,7 +475,8 @@ function resolveRouteByNotif (n) {
   const refType = n?.refType
   const refId = n?.refId
   switch (refType) {
-    case 'BOOKING': return refId ? { path: `/booking/${refId}` } : { path: '/booking-list' }
+    // ⬇️ ปรับให้ไปหน้า booking-info
+    case 'BOOKING': return refId ? { path: `/booking-info/${refId}` } : { path: '/booking-list' }
     case 'ISSUE': return { path: '/report', query: refId ? { issueId: String(refId) } : {} }
     case 'INVITE': return { path: '/my-invites' }
     default: return { path: '/home' }
@@ -519,6 +529,11 @@ function badge (s) {
   return 'bg-gray-100 text-gray-700'
 }
 
+// ➕ ปุ่มรายละเอียด
+function viewDetail(inv) {
+  router.push({ path: `/booking-info/${inv.bookingId}`, query: { ref: 'invites' } })
+}
+
 // api
 async function fetchInvites () {
   loading.value = true
@@ -545,7 +560,7 @@ async function accept (inv) {
     cancelButtonText: 'ยกเลิก'
   })
   if (!result.isConfirmed) return
-  
+
   actingId.value = inv.id
   try {
     await api.post(`/api/bookings/${inv.bookingId}/confirm`)
@@ -585,7 +600,7 @@ async function decline (inv) {
     cancelButtonText: 'ยกเลิก'
   })
   if (!result.isConfirmed) return
-  
+
   actingId.value = inv.id
   try {
     await api.post(`/api/bookings/${inv.bookingId}/decline`)
