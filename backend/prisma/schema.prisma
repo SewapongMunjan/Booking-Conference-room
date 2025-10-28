@@ -131,10 +131,10 @@ model User {
   position     Position @relation(fields: [positionId], references: [id])
   createdAt    DateTime @default(now())
 
-  bookingsBooked Booking[] @relation("BookedBy")
-  bookingInvites BookingInvite[]
+  bookingsBooked   Booking[]          @relation("BookedBy")
+  bookingInvites   BookingInvite[]
   noteTakerAssigns BookingNoteTaker[]
-  notifications Notification[] @relation("UserNotifications")
+  notifications    Notification[]     @relation("UserNotifications")
 
   // one-to-one กับคิว
   noteTakerQueue NoteTakerQueue?
@@ -145,8 +145,8 @@ model User {
   // งานแม่บ้านที่ถูกมอบหมาย (optional)
   housekeepingTasks HousekeepingTask[] @relation("HousekeepingAssignee")
 
-  // <-- เพิ่ม relation สำหรับ Issue/Comment
-  reportedIssues Issue[] @relation("IssueReporter")
+  // Issue/Comment
+  reportedIssues Issue[]        @relation("IssueReporter")
   issueComments  IssueComment[] @relation("IssueAuthor")
 }
 
@@ -158,6 +158,8 @@ model MeetingRoom {
   status   RoomStatus @default(AVAILABLE)
 
   bookings Booking[]
+  // ✅ back-relation ไปยัง Issue (ใช้ชื่อ relation เดียวกันกับฝั่ง Issue)
+  issues   Issue[]    @relation("IssueMeetingRoom")
 }
 
 model Booking {
@@ -240,15 +242,15 @@ model NoteTakerQueue {
 
 // ---------- Services / Options ----------
 model Service {
-  id           Int             @id @default(autoincrement())
-  name         String          @unique // เช่น "Coffee & Drinks", "Lunch"
-  category     ServiceCategory
-  departmentId Int?
-  department   Department?     @relation(fields: [departmentId], references: [id])
+  id             Int             @id @default(autoincrement())
+  name           String          @unique // เช่น "Coffee & Drinks", "Lunch"
+  category       ServiceCategory
+  departmentId   Int?
+  department     Department?     @relation(fields: [departmentId], references: [id])
 
   requiresApproval Boolean @default(false)
 
-  bookingUsages BookingService[]
+  bookingUsages     BookingService[]
   housekeepingTasks HousekeepingTask[]
 }
 
@@ -303,7 +305,7 @@ model NoteTakerLeave {
 model HousekeepingTask {
   id            Int                     @id @default(autoincrement())
   bookingId     Int
-  serviceId     Int                      // ชี้ไปที่ Service (เช่น Coffee & Drinks / Lunch)
+  serviceId     Int
   status        HousekeepingTaskStatus   @default(PENDING)
   assignedToId  Int?
   note          String?
@@ -316,32 +318,32 @@ model HousekeepingTask {
   // ผู้รับผิดชอบ (แม่บ้าน) — optional
   assignedTo    User?                    @relation("HousekeepingAssignee", fields: [assignedToId], references: [id])
 
-  @@unique([bookingId, serviceId])       // booking เดียว ต่อ service ชิ้นเดียว = งานเดียว
+  @@unique([bookingId, serviceId])
   @@index([status])
   @@index([assignedToId])
   @@index([bookingId])
   @@index([serviceId])
 }
 
-// Reports / Issues
+// ---------- Reports / Issues ----------
 model Issue {
-  id          Int              @id @default(autoincrement())
+  id          Int           @id @default(autoincrement())
   reporterId  Int
-  reporter    User             @relation("IssueReporter", fields: [reporterId], references: [id])
+  reporter    User          @relation("IssueReporter", fields: [reporterId], references: [id])
 
-  // <-- เพิ่มการอ้างอิงห้อง (nullable)
-  roomId      Int?
-  room        Room?            @relation(fields: [roomId], references: [id])
+  // ✅ อ้างอิงห้องจริง: MeetingRoom (nullable)
+  roomId        Int?
+  meetingRoom   MeetingRoom? @relation("IssueMeetingRoom", fields: [roomId], references: [id])
 
   issueType   IssueType
   subject     String
   description String
 
-  priority    IssuePriority    @default(MEDIUM)
-  status      IssueStatus      @default(PENDING)
+  priority    IssuePriority @default(MEDIUM)
+  status      IssueStatus   @default(PENDING)
 
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   comments     IssueComment[]
   attachments  IssueAttachment[]
@@ -350,7 +352,6 @@ model Issue {
   @@index([status, createdAt])
 }
 
-// Optional comments on an issue
 model IssueComment {
   id        Int      @id @default(autoincrement())
   issueId   Int
@@ -363,7 +364,6 @@ model IssueComment {
   @@index([issueId, authorId, createdAt])
 }
 
-// Optional attachments for issue (could store S3/URL reference)
 model IssueAttachment {
   id          Int      @id @default(autoincrement())
   issueId     Int
@@ -376,14 +376,14 @@ model IssueAttachment {
   @@index([issueId])
 }
 
-model Room {
-  id              Int       @id @default(autoincrement())
-  name            String
-  location        String?
-  status          String    @default("AVAILABLE")
-  maintenanceUntil DateTime?    // <-- เพิ่มบรรทัดนี้ เพื่อเก็บเวลาที่ห้องถูกปิดบำรุงจนถึง
-
-  issues    Issue[]   // add back-relation
-}
-
-
+/* -----------------------------------------------------------
+   (ถ้าไม่ได้ใช้จริง แนะนำลบโมเดล Room ออกเพื่อลดความสับสน)
+   หากต้องการเก็บไว้ ให้คงไว้ด้านล่างได้ แต่จะไม่เกี่ยวกับ Issue อีกต่อไป
+----------------------------------------------------------- */
+// model Room {
+//   id               Int       @id @default(autoincrement())
+//   name             String
+//   location         String?
+//   status           String    @default("AVAILABLE")
+//   maintenanceUntil DateTime?
+// }

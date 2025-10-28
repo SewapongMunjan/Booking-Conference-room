@@ -276,18 +276,18 @@
                 </select>
               </div>
 
-              <!-- ห้อง: ย้ายมาไว้ด้านล่างของระบุปัญหา -->
+              <!-- ห้อง -->
               <div>
                 <div class="flex items-center justify-between">
                   <label class="block text-xs text-gray-500 mb-1">เลือกห้อง (ถ้ามี)</label>
-                  <!-- ปุ่มรีเฟรชรายการห้อง -->
                   <button type="button" @click="fetchRooms" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">รีเฟรชห้อง</button>
                 </div>
 
+                <!-- ใช้ normalizedRooms เพื่อให้ value เป็น id แบบตัวเลขแน่ ๆ -->
                 <select v-model="form.roomId" class="w-full px-4 py-3 border rounded text-sm bg-white">
                   <option :value="null">-- ไม่ระบุห้อง --</option>
-                  <option v-for="r in rooms" :key="r.id" :value="Number(r.id)">
-                    {{ r.roomName || r.name }}<span v-if="r.location"> — {{ r.location }}</span>
+                  <option v-for="r in normalizedRooms" :key="r.id" :value="r.id">
+                    {{ r.label }}<span v-if="r.raw?.location"> — {{ r.raw.location }}</span>
                   </option>
                 </select>
                 <div v-if="loadingRooms" class="text-xs text-gray-400 mt-1">กำลังโหลดรายการห้อง...</div>
@@ -343,7 +343,6 @@
                 </div>
               </div>
 
-
               <!-- Actions -->
               <div class="flex items-center justify-end gap-3 pt-4 border-t">
                 <button 
@@ -372,74 +371,44 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import api from '@/lib/api.js'
 import Swal from 'sweetalert2'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
-// <-- เพิ่ม/ประกาศตัวแปรที่ใช้ทั่วไป (ป้องกัน ReferenceError)
+// state ทั่วไป
 let notiTimer = null
-const showMobileMenu = ref(false)          // <-- เพิ่ม: ตัวแปรเมนูมือถือ
+const showMobileMenu = ref(false)
 const submitting = ref(false)
 const loading = ref(false)
 const loadingRooms = ref(false)
 const rooms = ref([])
-const roomsError = ref('')          // <-- เพิ่มบรรทัดนี้
+const roomsError = ref('')
 const me = ref(null)
 
-// <-- เพิ่ม: form state ที่ขาดไป (ใน template ถูกอ้างถึง)
+// ฟอร์ม
 const form = ref({
   issueType: '',
   subject: '',
   description: '',
-  priority: 'MEDIUM',
-  roomId: null
+  priority: 'MEDIUM', // LOW / MEDIUM / HIGH
+  roomId: null        // number | null
 })
 
-/** Rooms for report */
+/** ========== Rooms ========== */
 async function fetchRooms() {
   loadingRooms.value = true
   roomsError.value = ''
   try {
-    // ลองเรียกแบบธรรมดาก่อน แล้ว fallback ไปที่ ?all=1 ถ้าเป็นไปได้
-    const tryUrls = ['/api/rooms', '/api/rooms?all=1']
-    let res = null
-    for (const u of tryUrls) {
-      try {
-        res = await api.get(u, { params: { page: 1, pageSize: 1000 } })
-        if (res && res.data) break
-      } catch (e) {
-        console.debug('fetchRooms: try failed', u, e?.response?.status || e.message)
-      }
-    }
-
-    if (!res || !res.data) {
-      // ถ้าไม่กลับมา ให้ลองเรียกแบบตรง (บางโปรเจคคืน array ตรง ๆ)
-      try {
-        const direct = await api.get('/api/rooms', { params: { page: 1, pageSize: 1000 } })
-        res = direct
-      } catch (e) {
-        console.warn('fetchRooms: final attempt failed', e)
-      }
-    }
-
-    const d = res?.data ?? res
-    // รองรับหลายรูปแบบ: array, { items: [...] }, { rooms: [...] }, หรือ { data: { items: [...] } }
-    if (Array.isArray(d)) {
-      rooms.value = d
-    } else if (Array.isArray(d?.items)) {
-      rooms.value = d.items
-    } else if (Array.isArray(d?.rooms)) {
-      rooms.value = d.rooms
-    } else if (Array.isArray(d?.data?.items)) {
-      rooms.value = d.data.items
-    } else {
-      rooms.value = []
-      roomsError.value = 'ไม่พบข้อมูลห้อง (response shape ไม่ตรงตามที่คาด)'
-      console.warn('fetchRooms: unexpected response', d)
-    }
+    const { data } = await api.get('/api/rooms', { params: { page: 1, pageSize: 1000 } })
+    const raw = Array.isArray(data) ? data
+      : Array.isArray(data?.items) ? data.items
+      : Array.isArray(data?.rooms) ? data.rooms
+      : Array.isArray(data?.data?.items) ? data.data.items
+      : []
+    rooms.value = raw
   } catch (e) {
     console.error('fetchRooms error', e)
     rooms.value = []
@@ -449,8 +418,17 @@ async function fetchRooms() {
   }
 }
 
+/** ทำให้ value ของ option เป็นเลข id แน่ ๆ */
+const normalizedRooms = computed(() => {
+  return (rooms.value || []).map((r) => {
+    const idRaw = r?.id ?? r?.roomId ?? r?.roomID ?? r?.room_id
+    const id = Number(idRaw)
+    const label = r?.roomName ?? r?.name ?? r?.label ?? r?.title ?? r?.code ?? `Room #${isNaN(id) ? '-' : id}`
+    return { id: isNaN(id) ? null : id, label, raw: r }
+  }).filter(x => x.id !== null)
+})
 
-/** Notifications */
+/** ========== Notifications / Me ========== */
 const showNotif = ref(false)
 const notifs = ref([])
 const unreadCount = ref(0)
@@ -464,10 +442,9 @@ function logout () {
 
 async function fetchMe() {
   try {
-    const { data } = await api.get('/api/me') // ปรับถ้า endpoint ของคุณต่างออกไป
+    const { data } = await api.get('/api/me')
     me.value = data?.user ?? data
   } catch (e) {
-    // silent - ไม่บังคับต้องมีผู้ใช้
     console.warn('fetchMe', e)
   }
 }
@@ -490,7 +467,6 @@ function formatTime (iso) {
   if (Number.isNaN(d.getTime())) return ''
   return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
 }
-
 function formatDate (iso) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
@@ -501,7 +477,6 @@ function toggleNotif () {
   showNotif.value = !showNotif.value
   if (showNotif.value) fetchNotifications()
 }
-
 function refreshNotif () { return fetchNotifications() }
 
 async function markAllAsRead () {
@@ -511,7 +486,6 @@ async function markAllAsRead () {
     unreadCount.value = 0
   } catch (e) { console.error(e) }
 }
-
 async function markAsRead (n) {
   try {
     await api.patch(`/api/notifications/${n.id}/read`)
@@ -530,7 +504,6 @@ function resolveRouteByNotif (n) {
     default: return { path: '/home' }
   }
 }
-
 async function goNotif (n) {
   try {
     if (!n.isRead) {
@@ -554,9 +527,18 @@ function handleClickOutside (e) {
   }
 }
 
-/** Report Functions */
+/** ========== Report Submit ========== */
+function mapPriorityToSeverity(p) {
+  switch (p) {
+    case 'LOW': return 'low'
+    case 'HIGH': return 'high'
+    default: return 'medium'
+  }
+}
+
 async function submitReport() {
   if (submitting.value) return
+
   if (!form.value.issueType || !form.value.subject || !form.value.description) {
     Swal.fire('กรอกข้อมูลไม่ครบ', 'กรุณากรอกประเภท หัวข้อ และรายละเอียดปัญหา', 'warning')
     return
@@ -569,19 +551,20 @@ async function submitReport() {
       subject: form.value.subject,
       description: form.value.description,
       priority: form.value.priority,
-      // convert to number or undefined
-      roomId: form.value.roomId ? Number(form.value.roomId) : undefined,
+      severity: mapPriorityToSeverity(form.value.priority),
+      roomId: form.value.roomId != null ? Number(form.value.roomId) : undefined,
       reporterId: me.value?.id ?? undefined
     }
 
-    console.debug('submitReport payload', payload) // ตรวจสอบก่อนส่ง
+    console.debug('submitReport payload', payload)
     await api.post('/api/issues', payload)
 
     await Swal.fire('ส่งเรียบร้อย', 'ทีมงานจะดำเนินการตรวจสอบ', 'success')
     resetForm()
   } catch (err) {
     console.error('submitReport', err)
-    Swal.fire('เกิดข้อผิดพลาด', err?.response?.data?.error || 'ไม่สามารถส่งรายงานได้', 'error')
+    const msg = err?.response?.data?.error || 'ไม่สามารถส่งรายงานได้'
+    Swal.fire('เกิดข้อผิดพลาด', msg, 'error')
   } finally {
     submitting.value = false
   }
@@ -595,7 +578,6 @@ function resetForm() {
   form.value.roomId = null
 }
 
-
 onMounted(async () => {
   await fetchMe()
   await fetchNotifications()
@@ -603,7 +585,6 @@ onMounted(async () => {
   notiTimer = setInterval(() => fetchNotifications(), 30000)
   document.addEventListener('click', handleClickOutside)
 })
-
 onUnmounted(() => {
   if (notiTimer) {
     clearInterval(notiTimer)
@@ -620,11 +601,9 @@ onUnmounted(() => {
 .nav-active {
   @apply bg-blue-50 text-blue-600;
 }
-
 .mobile-nav-link {
   @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900;
 }
-
 .modern-card {
   @apply bg-white rounded-2xl border border-gray-200 p-6;
 }
