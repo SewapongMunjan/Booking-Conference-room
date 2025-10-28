@@ -307,6 +307,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import Swal from 'sweetalert2'
 
 const router = useRouter()
 const route = useRoute()
@@ -394,7 +395,27 @@ function closeModal() { modalOpen.value = false; modalImage.value = '' }
 function equipmentSrc(eq) { return typeof eq === 'string' ? eq : (eq.img || '') }
 function equipmentName(eq) { return typeof eq === 'string' ? eq : (eq.name || '') }
 function goToBooking(id) { router.push({ path: '/booking', query: { roomId: id || selected.value.id } }) }
-function copyInfo() { const txt = `${selected.value.roomName} — ความจุ ${selected.value.capacity}\n${selected.value.description}`; navigator.clipboard?.writeText(txt); alert('คัดลอกข้อมูลแล้ว') }
+// ใช้ SweetAlert แจ้งเตือนเมื่อคัดลอกข้อมูล
+async function copyInfo() {
+  const txt = `${selected.value.roomName} — ความจุ ${selected.value.capacity}\n${selected.value.description}`
+  try {
+    await navigator.clipboard.writeText(txt)
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: 'คัดลอกข้อมูลแล้ว',
+      showConfirmButton: false,
+      timer: 1400
+    })
+  } catch (err) {
+    Swal.fire({
+      icon: 'error',
+      title: 'คัดลอกไม่สำเร็จ',
+      text: err?.message || 'ไม่สามารถคัดลอกได้'
+    })
+  }
+}
 
 onMounted(() => {
   if (!rooms.value.find(r => r.id === selectedId.value)) selectedId.value = rooms.value[0].id

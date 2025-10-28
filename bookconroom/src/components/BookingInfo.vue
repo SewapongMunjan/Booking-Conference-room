@@ -569,9 +569,14 @@
           <!-- ตัวอย่างตำแหน่งแทรกปุ่ม action -->
           <div class="actions mt-4 flex items-center justify-end gap-2">
             <!-- ...existing cancel button / other actions... -->
- 
-           <!-- เพิ่มปุ่มดาวน์โหลด PDF ใกล้ปุ่มยกเลิก -->
-            <BookingPdfButton :bookingId="booking?.id || Number(route.params.id)" class="ml-2" />
+
+            <!-- ปรับให้รับ event success/error จากปุ่มดาวน์โหลด -->
+            <BookingPdfButton
+              :bookingId="booking?.id || Number(route.params.id)"
+              class="ml-2"
+              @success="onPdfSuccess"
+              @error="onPdfError"
+            />
           </div>
         </div>
       </main>
@@ -995,6 +1000,29 @@ onUnmounted(() => {
   if (notiTimer) clearInterval(notiTimer)
   document.removeEventListener('click', handleClickOutside)
 })
+
+function onPdfSuccess(filename) {
+  Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'success',
+    title: 'ดาวน์โหลด PDF สำเร็จ',
+    text: filename ? filename : '',
+    showConfirmButton: false,
+    timer: 2000,
+    timerProgressBar: true
+  })
+}
+
+function onPdfError(err) {
+  console.error('PDF download error', err)
+  Swal.fire({
+    icon: 'error',
+    title: 'ดาวน์โหลดไม่สำเร็จ',
+    text: err?.response?.data?.error || err?.message || 'เกิดข้อผิดพลาดขณะดาวน์โหลดไฟล์',
+    confirmButtonColor: '#ef4444'
+  })
+}
 </script>
 
 <style scoped>
