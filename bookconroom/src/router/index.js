@@ -32,6 +32,7 @@ const SubstituteManager = () => import('@/page/note-taker/SubstituteManager.vue'
 import HousekeepingDashboard from '@/page/house_keeper/HousekeepingDashboard.vue'
 import HousekeepingTasks from '@/page/house_keeper/HousekeepingTasks.vue'
 import HousekeepingAssign from '@/page/house_keeper/HousekeepingAssign.vue'
+import HousekeepingComplete from '@/page/house_keeper/HousekeepingComplete.vue'
 
 /* =========================
  * Routes
@@ -103,6 +104,8 @@ const routes = [
   { path: '/housekeeping/dashboard', name: 'HousekeepingDashboard', component: HousekeepingDashboard, meta: { requiresAuth: true, roleReq: 'HOUSEKEEPER' } },
   { path: '/housekeeping/tasks', name: 'HousekeepingTasks', component: HousekeepingTasks, meta: { requiresAuth: true, roleReq: 'HOUSEKEEPER' } },
   { path: '/housekeeping/assign', name: 'HousekeepingAssign', component: HousekeepingAssign, meta: { requiresAuth: true, roleReq: 'HOUSEKEEPER' } },
+  { path: '/housekeeping/complete', name: 'HousekeepingComplete', component: HousekeepingComplete, meta: { requiresAuth: true, roleReq: 'HOUSEKEEPER' } },
+  
 
   // fallback
   { path: '/:pathMatch(.*)*', redirect: '/home' },

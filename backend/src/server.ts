@@ -20,8 +20,12 @@ import metaRoutes from "./routes/meta";
 import invitesRouter from "./routes/invites";
 import notetakersRouter from "./routes/notetakers";
 import notificationsRouter from "./routes/notifications";
+
 import housekeepingRoutes from "./routes/housekeeping";
 import meetings from "./routes/meetings";
+
+// ⬇️ เพิ่ม: router สำหรับ Report/Issue
+import reportRouter from "./routes/report";
 
 // ⬇️ ⬇️ ⬇️  เพิ่ม: router สำหรับ PDF
 import bookingsPdfRouter from "./routes/bookings.pdf";
@@ -117,6 +121,9 @@ app.use("/api/notetakers", notetakersRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/housekeeping", housekeepingRoutes);
 app.use("/api", meetings);
+
+// <-- ลงทะเบียน report router (routes defined with /api/issues ...)
+app.use(reportRouter);
 
 // ====== 404 ======
 app.use((_req: Request, res: Response) => {

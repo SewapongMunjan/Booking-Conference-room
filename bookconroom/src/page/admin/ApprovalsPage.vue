@@ -34,10 +34,10 @@
             <span class="text-lg">⚠️</span>
             <span class="text-sm">Issues</span>
           </router-link>
-          <router-link to="/admin/loans" class="nav-link">
+          <!-- <router-link to="/admin/loans" class="nav-link">
             <span class="text-lg">🔌</span>
             <span class="text-sm">Loans</span>
-          </router-link>
+          </router-link> -->
           <router-link to="/admin/room-status" class="nav-link">
             <span class="text-lg">ℹ️</span>
             <span class="text-sm">Room Status</span>
@@ -230,9 +230,9 @@
           <router-link to="/admin/issues" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">⚠️</span> <span class="text-sm">Issues</span>
           </router-link>
-          <router-link to="/admin/loans" class="mobile-nav-link" @click="showMobileMenu = false">
+          <!-- <router-link to="/admin/loans" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">🔌</span> <span class="text-sm">Loans</span>
-          </router-link>
+          </router-link> -->
           <router-link to="/admin/room-status" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">ℹ️</span> <span class="text-sm">Room Status</span>
           </router-link>

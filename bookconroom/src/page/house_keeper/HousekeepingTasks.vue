@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Sidebar (ให้หน้าตาเหมือน Dashboard) -->
+    <!-- Sidebar (same as dashboard) -->
     <aside class="hidden lg:block fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-200 z-50">
       <div class="h-full flex flex-col">
         <div class="p-4 border-b border-gray-200">
@@ -103,7 +103,6 @@
               <button v-if="t.status !== 'COMPLETED' && t.status !== 'done'" @click="markDone(t)" class="px-3 py-1.5 bg-green-600 text-white rounded text-sm">
                 ทำเสร็จ
               </button>
-              <!-- <button @click="toAssign(t)" class="px-3 py-1.5 border rounded text-sm">มอบหมาย</button> -->
             </div>
           </div>
         </div>
@@ -141,6 +140,7 @@ const statusTabs = [
 const sidebarItems = [
   { to: '/housekeeping/dashboard', label: 'Dashboard', icon: '🏠' },
   { to: '/housekeeping/tasks', label: 'งานทั้งหมด', icon: '🧾' },
+  { to: '/housekeeping/complete',  label: 'งานที่เสร็จสมบูรณ์', icon: '✅' },
 ]
 
 function isActive(item) {
@@ -171,7 +171,7 @@ function statusText(s) {
     REJECTED: 'ถูกยกเลิก',
     done: 'เสร็จสิ้น',
   }
-  return m[s] || s || 'รอดำเนินการ'
+  return m[s] || s || 'รอดดำเนินการ'
 }
 function statusPillClass(s) {
   switch (s) {
@@ -189,7 +189,6 @@ function fmtRange(a, b) {
   return `${s.toLocaleString()} - ${e.toLocaleString()}`
 }
 
-/* เติมจำนวนผู้ยืนยัน/เชิญทั้งหมด + เวลาประชุม + ชื่อบริการ จาก /api/bookings/:id */
 async function enrichFromBookingDetail(list) {
   const ids = Array.from(new Set(list.map(x => x.bookingId).filter(Boolean)))
   const chunks = []
@@ -240,11 +239,9 @@ async function load() {
   notFound.value = false
   try {
     const candidates = [
-      // แหล่งข้อมูลที่ตั้งใจ (งานของแม่บ้านจาก BookingService)
       ['/api/housekeeping/manage', {}],
       ['/api/housekeeping/dashboard', {}],
-      // สำรอง: ดึง booking list แล้วแปลงเป็นงานเบื้องต้น
-      ['/api/bookings', { params: { page: 1, pageSize: 200, start_gte: new Date().toISOString() } }],
+      ['/api/bookings', { params: { page: 1, pageSize: 200, start_gte: new Date().toISOString() } } ],
     ]
 
     let res = null
@@ -262,7 +259,6 @@ async function load() {
 
     const raw = res.data?.items ?? res.data ?? []
 
-    // รูปแบบ 1: มาจาก /housekeeping/* ที่มี bookingId, service, room ฯลฯ
     if (Array.isArray(raw) && (raw[0]?.service || raw[0]?.serviceName || raw[0]?.bookingId)) {
       tasks.value = raw.map(x => ({
         id: x.id,
@@ -277,9 +273,7 @@ async function load() {
         priority: x.priority ?? x.isUrgent ? 'high' : 'normal',
       }))
       await enrichFromBookingDetail(tasks.value)
-    }
-    // รูปแบบ 2: มาจาก /api/bookings (fallback) — แปลงเป็นงานเบื้องต้น
-    else {
+    } else {
       tasks.value = raw.map(b => ({
         id: b.id,
         bookingId: b.id,
@@ -320,10 +314,6 @@ async function markDone(task) {
     console.error('markDone', e)
     Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: e?.response?.data?.error || e?.message || 'อัปเดตสถานะไม่สำเร็จ' })
   }
-}
-
-function toAssign(task) {
-  router.push({ path: '/housekeeping/assign', query: { taskId: task.id, roomId: task.roomId || task.room?.id, bookingId: task.bookingId } })
 }
 
 onMounted(() => load())

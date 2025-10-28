@@ -92,7 +92,7 @@
                         <div class="flex justify-end gap-2">
                           <button class="px-3 py-1.5 rounded-lg border" @click="view(m)">รายละเอียด</button>
                           <!-- <button v-if="m.status!=='DONE'" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white" @click="openForm(m)">เปิดแบบฟอร์ม</button> -->
-                          <button v-if="m.status==='IN_PROGRESS'" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white" @click="viewReport(m)">ดูรายงาน</button>
+                          <!-- <button v-if="m.status==='IN_PROGRESS'" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white" @click="viewReport(m)">ดูรายงาน</button> -->
                         </div>
                       </td>
                     </tr>

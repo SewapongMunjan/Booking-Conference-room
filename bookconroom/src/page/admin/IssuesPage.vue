@@ -34,10 +34,10 @@
             <span class="text-lg">⚠️</span>
             <span class="text-sm">Issues</span>
           </router-link>
-          <router-link to="/admin/loans" class="nav-link">
+          <!-- <router-link to="/admin/loans" class="nav-link">
             <span class="text-lg">🔌</span>
             <span class="text-sm">Loans</span>
-          </router-link>
+          </router-link> -->
           <router-link to="/admin/room-status" class="nav-link">
             <span class="text-lg">ℹ️</span>
             <span class="text-sm">Room Status</span>
@@ -229,9 +229,9 @@
           <router-link to="/admin/issues" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">⚠️</span> <span class="text-sm">Issues</span>
           </router-link>
-          <router-link to="/admin/loans" class="mobile-nav-link" @click="showMobileMenu = false">
+          <!-- <router-link to="/admin/loans" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">🔌</span> <span class="text-sm">Loans</span>
-          </router-link>
+          </router-link> -->
           <router-link to="/admin/room-status" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">ℹ️</span> <span class="text-sm">Room Status</span>
           </router-link>
@@ -513,12 +513,12 @@
 </template>
 
 <script setup>
-import Swal from 'sweetalert2'
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import api from '@/lib/api.js'
-
+import Swal from 'sweetalert2'
+import { useRouter } from 'vue-router'
 const router = useRouter()
+
 const showMobileMenu = ref(false)
 const q = ref('')
 const items = ref([])
@@ -870,18 +870,35 @@ function closeDetail() {
   showDetail.value = false
 }
 
+async function startHandling(issue) {
+  try {
+    const { data } = await api.patch(`/api/issues/${issue.id}/start`)
+    Swal.fire({ icon: 'success', title: 'อัปเดตสถานะ', text: 'สถานะถูกเปลี่ยนเป็น กำลังดำเนินการ และห้องถูกปิดเพื่อซ่อมบำรุง' })
+    await load() // reload list
+  } catch (e) {
+    console.error(e)
+    Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: e?.response?.data?.error || 'ไม่สามารถอัปเดตได้' })
+  }
+}
+
 let notiTimer = null
+let issueTimer = null
 
 onMounted(async () => {
   await fetchMe()
   await load()
   await fetchNotifications()
   notiTimer = setInterval(() => fetchNotifications(), 30000)
+
+  // poll issues every 10s so admin page picks up newly submitted reports quickly
+  issueTimer = setInterval(() => load(), 10000)
+
   document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
   if (notiTimer) clearInterval(notiTimer)
+  if (issueTimer) clearInterval(issueTimer)
   document.removeEventListener('click', handleClickOutside)
 })
 </script>

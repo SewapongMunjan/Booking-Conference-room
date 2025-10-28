@@ -71,7 +71,7 @@
           </div>
           <div>
             <h2 class="text-lg font-semibold text-gray-900 m-0">ระบบจองห้องประชุม</h2>
-            <p class="text-xs text-gray-500 m-0 hidden sm:block lg:hidden">Meeting Room Booking System</p>
+            <p class="text-xs text-gray-500 m-0 mt-1 hidden sm:block lg:hidden">Meeting Room Booking System</p>
           </div>
         </div>
 
@@ -276,6 +276,24 @@
                 </select>
               </div>
 
+              <!-- ห้อง: ย้ายมาไว้ด้านล่างของระบุปัญหา -->
+              <div>
+                <div class="flex items-center justify-between">
+                  <label class="block text-xs text-gray-500 mb-1">เลือกห้อง (ถ้ามี)</label>
+                  <!-- ปุ่มรีเฟรชรายการห้อง -->
+                  <button type="button" @click="fetchRooms" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">รีเฟรชห้อง</button>
+                </div>
+
+                <select v-model="form.roomId" class="w-full px-4 py-3 border rounded text-sm bg-white">
+                  <option :value="null">-- ไม่ระบุห้อง --</option>
+                  <option v-for="r in rooms" :key="r.id" :value="Number(r.id)">
+                    {{ r.roomName || r.name }}<span v-if="r.location"> — {{ r.location }}</span>
+                  </option>
+                </select>
+                <div v-if="loadingRooms" class="text-xs text-gray-400 mt-1">กำลังโหลดรายการห้อง...</div>
+                <div v-if="roomsError" class="text-xs text-red-500 mt-1">{{ roomsError }}</div>
+              </div>
+
               <!-- Subject -->
               <div>
                 <label class="block text-sm font-semibold text-gray-900 mb-3">
@@ -325,6 +343,7 @@
                 </div>
               </div>
 
+
               <!-- Actions -->
               <div class="flex items-center justify-end gap-3 pt-4 border-t">
                 <button 
@@ -346,41 +365,6 @@
               </div>
             </form>
           </div>
-
-          <!-- Recent Issues (Optional) -->
-          <div class="modern-card shadow-md">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">รายการแจ้งปัญหาล่าสุด</h2>
-            
-            <div v-if="loadingIssues" class="text-center py-8">
-              <div class="inline-block w-8 h-8 border-3 border-gray-200 border-t-red-500 rounded-full animate-spin"></div>
-            </div>
-
-            <div v-else-if="recentIssues.length === 0" class="text-center py-8">
-              <p class="text-gray-500">ยังไม่มีรายการแจ้งปัญหา</p>
-            </div>
-
-            <div v-else class="space-y-3">
-              <div
-                v-for="issue in recentIssues"
-                :key="issue.id"
-                class="p-4 border border-gray-200 rounded-xl hover:shadow-md transition-all"
-              >
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex-1">
-                    <h3 class="font-semibold text-gray-900 mb-1">{{ issue.subject }}</h3>
-                    <p class="text-sm text-gray-600 mb-2">{{ issue.description }}</p>
-                    <div class="flex items-center gap-3 text-xs text-gray-500">
-                      <span>📅 {{ formatDate(issue.createdAt) }}</span>
-                      <span :class="priorityColor(issue.priority)">{{ priorityText(issue.priority) }}</span>
-                    </div>
-                  </div>
-                  <span :class="['px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap', statusColor(issue.status)]">
-                    {{ statusText(issue.status) }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </main>
     </div>
@@ -388,27 +372,83 @@
 </template>
 
 <script setup>
-import Swal from 'sweetalert2'
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted } from 'vue'
 import api from '@/lib/api.js'
+import Swal from 'sweetalert2'
+import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const showMobileMenu = ref(false)
+
+// <-- เพิ่ม/ประกาศตัวแปรที่ใช้ทั่วไป (ป้องกัน ReferenceError)
+let notiTimer = null
+const showMobileMenu = ref(false)          // <-- เพิ่ม: ตัวแปรเมนูมือถือ
+const submitting = ref(false)
+const loading = ref(false)
+const loadingRooms = ref(false)
+const rooms = ref([])
+const roomsError = ref('')          // <-- เพิ่มบรรทัดนี้
 const me = ref(null)
 
-/** Form State */
+// <-- เพิ่ม: form state ที่ขาดไป (ใน template ถูกอ้างถึง)
 const form = ref({
   issueType: '',
   subject: '',
   description: '',
-  priority: 'MEDIUM'
+  priority: 'MEDIUM',
+  roomId: null
 })
-const submitting = ref(false)
 
-/** Issues List */
-const recentIssues = ref([])
-const loadingIssues = ref(false)
+/** Rooms for report */
+async function fetchRooms() {
+  loadingRooms.value = true
+  roomsError.value = ''
+  try {
+    // ลองเรียกแบบธรรมดาก่อน แล้ว fallback ไปที่ ?all=1 ถ้าเป็นไปได้
+    const tryUrls = ['/api/rooms', '/api/rooms?all=1']
+    let res = null
+    for (const u of tryUrls) {
+      try {
+        res = await api.get(u, { params: { page: 1, pageSize: 1000 } })
+        if (res && res.data) break
+      } catch (e) {
+        console.debug('fetchRooms: try failed', u, e?.response?.status || e.message)
+      }
+    }
+
+    if (!res || !res.data) {
+      // ถ้าไม่กลับมา ให้ลองเรียกแบบตรง (บางโปรเจคคืน array ตรง ๆ)
+      try {
+        const direct = await api.get('/api/rooms', { params: { page: 1, pageSize: 1000 } })
+        res = direct
+      } catch (e) {
+        console.warn('fetchRooms: final attempt failed', e)
+      }
+    }
+
+    const d = res?.data ?? res
+    // รองรับหลายรูปแบบ: array, { items: [...] }, { rooms: [...] }, หรือ { data: { items: [...] } }
+    if (Array.isArray(d)) {
+      rooms.value = d
+    } else if (Array.isArray(d?.items)) {
+      rooms.value = d.items
+    } else if (Array.isArray(d?.rooms)) {
+      rooms.value = d.rooms
+    } else if (Array.isArray(d?.data?.items)) {
+      rooms.value = d.data.items
+    } else {
+      rooms.value = []
+      roomsError.value = 'ไม่พบข้อมูลห้อง (response shape ไม่ตรงตามที่คาด)'
+      console.warn('fetchRooms: unexpected response', d)
+    }
+  } catch (e) {
+    console.error('fetchRooms error', e)
+    rooms.value = []
+    roomsError.value = 'เกิดข้อผิดพลาดขณะดึงรายการห้อง'
+  } finally {
+    loadingRooms.value = false
+  }
+}
+
 
 /** Notifications */
 const showNotif = ref(false)
@@ -422,11 +462,14 @@ function logout () {
   router.push('/login')
 }
 
-async function fetchMe () {
+async function fetchMe() {
   try {
-    const { data } = await api.get('/api/auth/me')
-    me.value = data
-  } catch { me.value = null }
+    const { data } = await api.get('/api/me') // ปรับถ้า endpoint ของคุณต่างออกไป
+    me.value = data?.user ?? data
+  } catch (e) {
+    // silent - ไม่บังคับต้องมีผู้ใช้
+    console.warn('fetchMe', e)
+  }
 }
 
 async function fetchNotifications() {
@@ -512,115 +555,60 @@ function handleClickOutside (e) {
 }
 
 /** Report Functions */
-async function submitReport () {
+async function submitReport() {
   if (submitting.value) return
-  
+  if (!form.value.issueType || !form.value.subject || !form.value.description) {
+    Swal.fire('กรอกข้อมูลไม่ครบ', 'กรุณากรอกประเภท หัวข้อ และรายละเอียดปัญหา', 'warning')
+    return
+  }
+
   submitting.value = true
   try {
-    await api.post('/api/issues', {
+    const payload = {
       issueType: form.value.issueType,
       subject: form.value.subject,
       description: form.value.description,
-      priority: form.value.priority
-    })
+      priority: form.value.priority,
+      // convert to number or undefined
+      roomId: form.value.roomId ? Number(form.value.roomId) : undefined,
+      reporterId: me.value?.id ?? undefined
+    }
 
-    await Swal.fire({
-      icon: 'success',
-      title: 'ส่งรายงานสำเร็จ',
-      text: 'ทีมงานจะดำเนินการตรวจสอบและแก้ไขโดยเร็วที่สุด',
-      confirmButtonText: 'ตกลง',
-      confirmButtonColor: '#dc2626'
-    })
+    console.debug('submitReport payload', payload) // ตรวจสอบก่อนส่ง
+    await api.post('/api/issues', payload)
 
+    await Swal.fire('ส่งเรียบร้อย', 'ทีมงานจะดำเนินการตรวจสอบ', 'success')
     resetForm()
-    await fetchRecentIssues()
-  } catch (e) {
-    console.error(e)
-    Swal.fire({
-      icon: 'error',
-      title: 'เกิดข้อผิดพลาด',
-      text: e?.response?.data?.error || 'ไม่สามารถส่งรายงานได้',
-      confirmButtonText: 'ตกลง',
-      confirmButtonColor: '#ef4444'
-    })
+  } catch (err) {
+    console.error('submitReport', err)
+    Swal.fire('เกิดข้อผิดพลาด', err?.response?.data?.error || 'ไม่สามารถส่งรายงานได้', 'error')
   } finally {
     submitting.value = false
   }
 }
 
-function resetForm () {
-  form.value = {
-    issueType: '',
-    subject: '',
-    description: '',
-    priority: 'MEDIUM'
-  }
+function resetForm() {
+  form.value.issueType = ''
+  form.value.subject = ''
+  form.value.description = ''
+  form.value.priority = 'MEDIUM'
+  form.value.roomId = null
 }
 
-async function fetchRecentIssues () {
-  loadingIssues.value = true
-  try {
-    const { data } = await api.get('/api/issues/my', {
-      params: { page: 1, pageSize: 5 }
-    })
-    recentIssues.value = Array.isArray(data?.items) ? data.items : []
-  } catch (e) {
-    console.error(e)
-  } finally {
-    loadingIssues.value = false
-  }
-}
-
-function priorityText (p) {
-  switch (p) {
-    case 'LOW': return '🟢 ต่ำ'
-    case 'MEDIUM': return '🟡 ปานกลาง'
-    case 'HIGH': return '🔴 สูง'
-    default: return p
-  }
-}
-
-function priorityColor (p) {
-  switch (p) {
-    case 'LOW': return 'text-green-600'
-    case 'MEDIUM': return 'text-amber-600'
-    case 'HIGH': return 'text-red-600'
-    default: return 'text-gray-600'
-  }
-}
-
-function statusText (s) {
-  switch (s) {
-    case 'PENDING': return 'รอดำเนินการ'
-    case 'IN_PROGRESS': return 'กำลังดำเนินการ'
-    case 'RESOLVED': return 'แก้ไขแล้ว'
-    case 'CLOSED': return 'ปิดงาน'
-    default: return s
-  }
-}
-
-function statusColor (s) {
-  switch (s) {
-    case 'PENDING': return 'bg-amber-100 text-amber-800'
-    case 'IN_PROGRESS': return 'bg-blue-100 text-blue-800'
-    case 'RESOLVED': return 'bg-green-500 text-white'
-    case 'CLOSED': return 'bg-gray-200 text-gray-700'
-    default: return 'bg-gray-100 text-gray-700'
-  }
-}
-
-let notiTimer = null
 
 onMounted(async () => {
   await fetchMe()
   await fetchNotifications()
-  await fetchRecentIssues()
+  await fetchRooms()
   notiTimer = setInterval(() => fetchNotifications(), 30000)
   document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
-  if (notiTimer) clearInterval(notiTimer)
+  if (notiTimer) {
+    clearInterval(notiTimer)
+    notiTimer = null
+  }
   document.removeEventListener('click', handleClickOutside)
 })
 </script>

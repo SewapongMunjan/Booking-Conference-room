@@ -271,9 +271,6 @@
               <RouterLink to="/booking" class="px-6 py-3 bg-white text-blue-600 rounded-xl text-base font-semibold hover:bg-blue-50 shadow-md hover:shadow-lg transition-all">
                 📅 จองเลย
               </RouterLink>
-              <button class="px-6 py-3 bg-white/20 text-white rounded-xl text-base font-semibold hover:bg-white/30 border-2 border-white/30 backdrop-blur-sm transition-all">
-                📚 เรียนรู้เพิ่มเติม
-              </button>
             </div>
           </section>
 

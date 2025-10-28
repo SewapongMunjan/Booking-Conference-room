@@ -266,13 +266,11 @@
             </div>
           </div>
 
-          <!-- Main Grid -->
+
           <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <!-- LEFT: FORM (2 columns) -->
             <div class="xl:col-span-2 space-y-6">
               <div class="modern-card shadow-md">
-                <h2 class="text-xl font-semibold text-gray-900 mb-6">รายละเอียดการจอง</h2>
-
                 <form @submit.prevent="submitBooking" class="space-y-5" novalidate>
                   <!-- Room -->
                   <div>
@@ -546,6 +544,51 @@
 
             <!-- RIGHT: SUMMARY & CALENDAR -->
             <div class="hidden xl:block xl:col-span-1 space-y-6">
+              <!-- Room Summary -->
+              <div class="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">สรุปการจองห้อง</h2>
+                <div class="flex flex-col gap-3">
+                  <div class="flex items-start gap-3">
+                    <!-- Image preview -->
+                    <div class="w-28 h-20 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                      <img v-if="selectedRoomDetails?.images?.length" :src="selectedRoomDetails.images[0]" class="w-full h-full object-cover" />
+                      <div v-else class="w-full h-full flex items-center justify-center text-gray-400">No image</div>
+                    </div>
+
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center justify-between">
+                        <div>
+                          <div class="text-sm text-gray-500">ห้องประชุม:</div>
+                          <div class="font-semibold text-gray-900">{{ currentRoomName }}</div>
+                        </div>
+                        <div class="text-xs text-gray-500">ความจุ: {{ selectedRoom?.capacity || '-' }} ที่นั่ง</div>
+                      </div>
+
+                      <!-- short description -->
+                      <div class="text-xs text-gray-600 mt-2 truncate">{{ selectedRoomDetails?.shortDescription || selectedRoomDetails?.description || 'ไม่มีรายละเอียด' }}</div>
+                    </div>
+                  </div>
+
+                  <!-- full description & amenities -->
+                  <div v-if="selectedRoomDetails" class="pt-2 border-t border-gray-100">
+                    <p class="text-sm text-gray-700 mb-2">{{ selectedRoomDetails.description }}</p>
+
+                    <div class="flex flex-wrap gap-2">
+                      <span v-for="a in selectedRoomDetails.amenities" :key="a" class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-50 text-xs text-gray-700 border">
+                        {{ a }}
+                      </span>
+                    </div>
+
+                    <!-- thumbnails -->
+                    <div v-if="selectedRoomDetails.images?.length > 1" class="mt-3 flex gap-2 overflow-x-auto">
+                      <img v-for="(img, idx) in selectedRoomDetails.images" :key="idx" :src="img"
+                        class="w-20 h-14 object-cover rounded-lg border border-gray-100"
+                        @click="selectPreviewImage(idx)" :class="previewIndex === idx ? 'ring-2 ring-emerald-300' : ''" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- Room Summary -->
               <div class="bg-white p-4 rounded-xl shadow-md border border-gray-200">
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">สรุปการจองห้อง</h2>
@@ -875,19 +918,33 @@ function overlaps (aStart, aEnd, bStart, bEnd) {
 /* ---------- API ---------- */
 async function fetchRooms () { 
   try {
-    // ขอ "ทุกห้อง" จาก backend (all=1) และรองรับทั้งรูปแบบ { items: [...] } หรือ [...] 
     const res = await api.get('/api/rooms', { params: { all: 1 } })
     const data = res?.data ?? []
     const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
-    // normalize fields used by template
-    rooms.value = items.map(r => ({
-      id: r.id,
-      roomName: r.roomName || r.name || r.room_name || `ห้อง ${r.id}`,
-      capacity: r.capacity ?? r.seats ?? null,
-      status: (r.status || '').toUpperCase(),
-      // keep raw object for other use
-      raw: r
-    }))
+
+    rooms.value = items.map(r => {
+      const maintenanceUntil = r.maintenanceUntil ? new Date(r.maintenanceUntil) : null
+      let status = (r.status || '').toUpperCase() || 'AVAILABLE'
+      if (maintenanceUntil && maintenanceUntil.getTime() > Date.now()) {
+        status = 'MAINTENANCE'
+      }
+      const statusLabel = status === 'AVAILABLE' ? 'ว่าง' : (status === 'MAINTENANCE' ? 'ปิดบำรุงรักษา' : status)
+
+      const roomObj = {
+        id: r.id,
+        roomName: r.roomName || r.name || `ห้อง ${r.id}`,
+        capacity: r.capacity ?? null,
+        status,
+        statusLabel,
+        maintenanceUntil: maintenanceUntil ? maintenanceUntil.toISOString() : null,
+        raw: r
+      }
+
+      // attach details either from API (r.details) or generate mock
+      roomObj.details = r.details || generateRoomDetails(roomObj)
+
+      return roomObj
+    })
   } catch (err) {
     console.error('fetchRooms', err)
     rooms.value = []
@@ -1277,8 +1334,130 @@ const selectedRoom = computed(() => {
   if (roomId === null || typeof roomId === 'undefined') return null
   return rooms.value.find(r => String(r.id) === String(roomId)) || null
 })
-</script>
 
+/* ---------- helper: bucket capacity -> 30/50/100 */
+function capacityBucket(cap) {
+  const c = Number(cap) || 30
+  if (c <= 30) return 30
+  if (c <= 50) return 50
+  return 100
+}
+
+/* ---------- small equipment catalog (ชื่อ + image link) */
+const equipmentCatalog = [
+  { name: 'Projector', img: 'https://source.unsplash.com/400x300/?projector' },
+  { name: 'Whiteboard', img: 'https://source.unsplash.com/400x300/?whiteboard' },
+  { name: 'Microphone', img: 'https://source.unsplash.com/400x300/?microphone' },
+  { name: 'Speaker', img: 'https://source.unsplash.com/400x300/?speaker' },
+  { name: 'Video conference', img: 'https://source.unsplash.com/400x300/?video-conference' },
+]
+
+/* ---------- updated generator: 3 images per capacity bucket + equipment list (fixed URLs) ---------- */
+function generateRoomDetails(r) {
+  const name = r.roomName || r.name || `ห้อง ${r.id}`
+  const cap = r.capacity ?? 30
+  const bucket = capacityBucket(cap) // 30 | 50 | 100
+
+  // mapping: ให้ลิงก์ชัดเจนตาม bucket (ไม่ต่อสตริงผิด ๆ)
+  const imagesMap = {
+    30: [
+      'https://i.ibb.co/5WyLf7xn/30-1.png',
+      'https://i.ibb.co/bR2Gdhnn/30-2.png',
+      'https://i.ibb.co/jP9yCDXc/30-3.jpg'
+    ],
+    50: [
+      'https://i.ibb.co/whX6JWBD/50-1.png',
+      'https://i.ibb.co/nNswbMch/50-2.png',
+      'https://i.ibb.co/RpKRg2j1/50-3.png'
+    ],
+    100: [
+      'https://i.ibb.co/Fk45j2TN/100-1.png',
+      'https://i.ibb.co/k22NY0j2/100-2.jpg',
+      'https://i.ibb.co/Sg8jz7G/100-3.jpg'
+    ]
+  }
+
+  const images = imagesMap[bucket] || imagesMap[30]
+
+  const short = `${name} เหมาะสำหรับการประชุมประมาณ ${cap} คน`
+  const description = r.raw?.description || `${name} รองรับ ${cap} คน มีอุปกรณ์พื้นฐานสำหรับการประชุม`
+  const amenities = r.raw?.amenities || ['โปรเจคเตอร์', 'ไวไฟ', 'ไวท์บอร์ด']
+
+  // อุปกรณ์: ให้ img เป็น URL (ใช้ของคุณหรือ fallback)
+  const equipment = r.raw?.equipment || [
+    { name: 'Projector', img: 'https://i.ibb.co/jPQL9h5J/projec.jpg' },
+    { name: 'Whiteboard', img: 'https://i.ibb.co/dsJd35QT/white.jpg' },
+    { name: 'Microphone', img: 'https://i.ibb.co/C3ZGp0Qz/Mic.jpg' },
+  ]
+
+  return { shortDescription: short, description, amenities, images: [...images], equipment }
+}
+
+function equipmentSrc(eq) {
+  if (!eq) return ''
+  if (typeof eq === 'string') return eq
+  return eq.img || eq.src || ''
+}
+function equipmentName(eq) {
+  if (!eq) return ''
+  return typeof eq === 'string' ? eq : (eq.name || eq.title || '')
+}
+function openEquipment(eq) {
+  const src = equipmentSrc(eq)
+
+  if (src) window.open(src, '_blank')
+}
+
+// computed selectedRoomDetails
+const selectedRoomDetails = computed(() => {
+  if (!selectedRoom.value) return null
+  if (selectedRoom.value.details) return selectedRoom.value.details
+  const d = generateRoomDetails(selectedRoom.value)
+  // attach in-memory
+  selectedRoom.value.details = d
+  return d
+})
+
+// preview image selection
+function selectPreviewImage(idx) {
+  previewIndex.value = idx
+  const d = selectedRoomDetails.value
+  if (!d || !d.images) return
+  if (idx === 0) return
+  const img = d.images.splice(idx, 1)[0]
+  d.images.unshift(img)
+}
+
+// keep selectedRoom in sync with form.roomId
+watch(() => form.value.roomId, (val) => {
+  const id = Number(val)
+  selectedRoom.value = rooms.value.find(r => Number(r.id) === id) || null
+})
+
+// ensure rooms loaded (call existing fetch or new fetch)
+onMounted(async () => {
+  // if you have fetchRoomsWithDetails or fetchRooms, call it; otherwise fetch simple
+  try {
+    if (typeof fetchRoomsWithDetails === 'function') {
+      await fetchRoomsWithDetails()
+    } else if (typeof fetchRooms === 'function') {
+      await fetchRooms()
+    } else {
+      // fallback simple loader
+      const res = await api.get('/api/rooms', { params: { all: 1 } })
+      const items = Array.isArray(res.data) ? res.data : (res.data?.items || [])
+      rooms.value = items.map(r => ({
+        id: r.id,
+        roomName: r.roomName || r.name,
+        capacity: r.capacity,
+        raw: r
+      }))
+    }
+  } catch (e) {
+    console.error('load rooms fallback', e)
+  }
+})
+</script>
 <style scoped>
 .nav-link {
   @apply flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900;
