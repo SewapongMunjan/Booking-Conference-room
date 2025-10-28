@@ -35,6 +35,12 @@ function normalizePriority(
   return fallback;
 }
 
+async function setIssueStatus(id: number, status: "PENDING" | "IN_PROGRESS" | "RESOLVED" | "CLOSED") {
+  return prisma.issue.update({
+    where: { id },
+    data: { status },
+  });
+}
 /**
  * GET /api/issues
  * query: page, pageSize, sort
@@ -161,6 +167,84 @@ router.post("/api/issues", async (req: Request, res: Response) => {
     if (err?.code === "P2025") {
       return res.status(400).json({ error: "Related record not found" });
     }
+    return res.status(500).json({ error: err?.message || "Internal Server Error" });
+  }
+});
+
+// ---------- Update Issue Status ----------
+router.patch("/api/issues/:id/status", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
+
+    // รับจาก body หรือ query ก็ได้
+    const raw = String((req.body?.status ?? req.query?.status ?? "")).toUpperCase();
+    const ALLOWED = ["PENDING", "IN_PROGRESS", "RESOLVED", "CLOSED"] as const;
+    if (!ALLOWED.includes(raw as any)) {
+      return res.status(400).json({ error: `status must be one of ${ALLOWED.join(", ")}` });
+    }
+
+    const issue = await prisma.issue.update({
+      where: { id },
+      data: { status: raw as any },
+    });
+
+    return res.json({ issue });
+  } catch (err: any) {
+    console.error("PATCH /api/issues/:id/status error:", err);
+    if (err?.code === "P2025") return res.status(404).json({ error: "issue not found" });
+    return res.status(500).json({ error: err?.message || "Internal Server Error" });
+  }
+});
+
+router.post("/api/issues/:id/resolve", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const issue = await setIssueStatus(id, "RESOLVED");
+    return res.json({ issue });
+  } catch (err: any) {
+    if (err?.code === "P2025") return res.status(404).json({ error: "issue not found" });
+    console.error("POST /api/issues/:id/resolve", err);
+    return res.status(500).json({ error: err?.message || "Internal Server Error" });
+  }
+});
+
+router.post("/api/issues/:id/in-progress", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const issue = await setIssueStatus(id, "IN_PROGRESS");
+    return res.json({ issue });
+  } catch (err: any) {
+    if (err?.code === "P2025") return res.status(404).json({ error: "issue not found" });
+    console.error("POST /api/issues/:id/in-progress", err);
+    return res.status(500).json({ error: err?.message || "Internal Server Error" });
+  }
+});
+
+router.post("/api/issues/:id/close", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const issue = await setIssueStatus(id, "CLOSED");
+    return res.json({ issue });
+  } catch (err: any) {
+    if (err?.code === "P2025") return res.status(404).json({ error: "issue not found" });
+    console.error("POST /api/issues/:id/close", err);
+    return res.status(500).json({ error: err?.message || "Internal Server Error" });
+  }
+});
+
+router.post("/api/issues/:id/reopen", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id || Number.isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const issue = await setIssueStatus(id, "PENDING");
+    return res.json({ issue });
+  } catch (err: any) {
+    if (err?.code === "P2025") return res.status(404).json({ error: "issue not found" });
+    console.error("POST /api/issues/:id/reopen", err);
     return res.status(500).json({ error: err?.message || "Internal Server Error" });
   }
 });
