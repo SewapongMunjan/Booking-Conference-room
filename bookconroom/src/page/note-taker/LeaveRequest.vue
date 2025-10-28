@@ -58,63 +58,42 @@
           <div v-if="fetchError" class="text-red-600 p-4 rounded-lg bg-red-50 border border-red-100">Error: {{ fetchError }}</div>
 
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Form (left) -->
             <section class="lg:col-span-1 modern-card">
-              <h3 class="font-medium mb-4">ขออนุญาตลา</h3>
+              <h3 class="font-medium mb-4">ขออนุญาตลา (แบบง่าย)</h3>
 
               <label class="block text-sm text-gray-600">ลากระทันหัน / ฉุกเฉิน</label>
               <div class="mb-3">
                 <label class="inline-flex items-center gap-2">
                   <input type="checkbox" v-model="isEmergency" class="form-checkbox h-4 w-4" />
-                  <span class="text-sm text-gray-700">ลากระทันหัน (ส่งคำขอได้ทันที ไม่ต้องรอล่วงหน้า 2 วัน)</span>
+                  <span class="text-sm text-gray-700">ลากระทันหัน (ส่งคำขอได้ทันที)</span>
                 </label>
-              </div>
-
-              <!-- show today's tasks when emergency checked -->
-              <div v-if="isEmergency" class="mb-4 p-3 border rounded-lg bg-gray-50">
-                <div class="flex items-center justify-between mb-2">
-                  <div class="text-sm font-medium">งาน / ภารกิจวันนี้ ({{ todayISO }})</div>
-                  <button v-if="!tasksLoading" @click="fetchTodayTasks" class="text-xs px-2 py-1 rounded bg-white border">รีเฟรช</button>
-                </div>
-
-                <div v-if="tasksLoading" class="text-xs text-gray-500">กำลังโหลดงานวันนี้...</div>
-                <div v-else>
-                  <div v-if="!tasksToday.length" class="text-xs text-gray-500">ไม่พบงานในวันนี้</div>
-                  <ul class="space-y-2">
-                    <li v-for="t in tasksToday" :key="t.id" class="flex items-start gap-3">
-                      <label class="inline-flex items-center gap-2">
-                        <input type="checkbox" v-model="selectedTasks" :value="t.id" class="form-checkbox h-4 w-4" />
-                      </label>
-                      <div class="flex-1 text-sm">
-                        <div class="font-medium">{{ t.title || t.summary || t.name }}</div>
-                        <div class="text-xs text-gray-500">{{ t.timeRange || t.start }}</div>
-                        <div class="text-xs text-gray-400">{{ t.location || t.roomName || '' }}</div>
-                      </div>
-                    </li>
-                  </ul>
-                </div>
               </div>
 
               <label class="block text-sm text-gray-600">วันที่เริ่ม</label>
               <input
                 type="date"
                 v-model="from"
-                :min="minStartForForm"
+                :min="minDateToday"
                 class="w-full mt-1 mb-3 p-2 border rounded-md"
               />
 
-              <label class="block text-sm text-gray-600">วันที่สิ้นสุด</label>
+              <label class="block text-sm text-gray-600">วันที่สิ้นสุด (ถ้ามี)</label>
               <input
                 type="date"
                 v-model="to"
-                :min="from || minStartForForm"
+                :min="from || minDateToday"
                 class="w-full mt-1 mb-3 p-2 border rounded-md"
               />
 
-              <div class="text-xs text-gray-500 mb-3" v-if="!isEmergency">
-                คำขอปกติต้องส่งล่วงหน้าอย่างน้อย 2 วัน (วันเริ่มขั้นต่ำ: {{ minStartForForm }})
-              </div>
-              <div class="text-xs text-gray-500 mb-3" v-else>
-                ลากระทันหัน: สามารถเริ่มได้ตั้งแต่วันนี้ ({{ minStartForForm }})
+              <div class="text-xs text-gray-500 mb-3">
+                หมายเหตุ:
+                <template v-if="isEmergency">
+                  ลากระทันหันสามารถเริ่มได้ตั้งแต่วันนี้
+                </template>
+                <template v-else>
+                  คำขอปกติ: ต้องส่งล่วงหน้าอย่างน้อย 2 วัน (ไม่สามารถขอย้อนหลังได้)
+                </template>
               </div>
 
               <label class="block text-sm text-gray-600">เหตุผล</label>
@@ -131,6 +110,7 @@
               </div>
             </section>
 
+            <!-- History (right) -->
             <section class="lg:col-span-2 modern-card">
               <div class="flex items-center justify-between mb-4">
                 <h3 class="font-medium">ประวัติการลา</h3>
@@ -178,21 +158,6 @@
               </div>
             </section>
           </div>
-
-          <!-- New Request Section -->
-          <div class="modern-card p-6">
-            <h3 class="font-medium mb-4">คำขอลาใหม่</h3>
-            <div class="mb-4">
-              <button @click="newRequest" class="px-3 py-2 bg-sky-600 text-white rounded">สร้างคำขอใหม่</button>
-            </div>
-            <div v-if="requests.length === 0" class="text-gray-500">ยังไม่มีคำขอ</div>
-            <ul class="space-y-3">
-              <li v-for="r in requests" :key="r.id" class="p-3 bg-white border rounded-lg">
-                <div class="font-medium">{{ r.type || 'ขอช่วยแทน' }} - {{ r.status || 'ส่งแล้ว' }}</div>
-                <div class="text-xs text-gray-500">{{ r.period || '-' }}</div>
-              </li>
-            </ul>
-          </div>
         </div>
       </main>
     </div>
@@ -220,76 +185,37 @@ const requests = ref([])
 const fetchError = ref('')
 const me = ref({ id: undefined, name: '', fullName: '', email: '', avatarUrl: '' })
 
-// tasks today for emergency mode
-const tasksToday = ref([])   // [{id, title, startTime, endTime, roomName, timeRange, bookingId}]
-const tasksLoading = ref(false)
-const selectedTasks = ref([])  // [bookingId]
-
-/* ---- user/me ---- */
-async function fetchMe(){
-  const tryPaths = ['/api/auth/me','/api/users/me','/api/me']
-  for (const p of tryPaths) {
-    try {
-      const { data } = await api.get(p)
-      if (data) {
-        me.value = {
-          id: data.id ?? data.userId ?? data.sub,
-          name: data.name ?? data.fullName ?? me.value.name,
-          fullName: data.fullName ?? data.name ?? me.value.fullName,
-          email: data.email ?? me.value.email,
-          avatarUrl: data.avatarUrl ?? me.value.avatarUrl
-        }
-        return
-      }
-    } catch(_) {}
-  }
-}
-
-const todayISO = computed(() => {
-  const d = new Date(); d.setHours(0,0,0,0)
-  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0')
-  return `${y}-${m}-${dd}`
-})
-
-// helper date formatting
+/* helper: today's ISO yyyy-mm-dd (no past allowed) */
 function pad(n){ return String(n).padStart(2, '0') }
 function yyyy_mm_dd(d){
   const y = d.getFullYear(), m = pad(d.getMonth()+1), dd = pad(d.getDate())
   return `${y}-${m}-${dd}`
 }
-function* eachDate(aStr, bStr){
-  const a = new Date(aStr), b = new Date(bStr || aStr)
-  for (let d = new Date(a); d <= b; d.setDate(d.getDate()+1)) {
-    yield yyyy_mm_dd(d)
-  }
-}
+const minDateToday = yyyy_mm_dd(new Date())
 
-// MIN dates for form
+const todayISO = computed(() => minDateToday)
+
+// MIN allowed for "normal" requests is today + 2 days (advance notice)
 const minStartForForm = computed(() => {
-  const today = new Date()
-  const base = new Date(today); base.setHours(0,0,0,0)
-  if (isEmergency.value) {
-    return yyyy_mm_dd(base) // today
-  }
-  // normal request: today + 2 days
-  const early = new Date(base); early.setDate(early.getDate() + 2)
+  if (isEmergency.value) return yyyy_mm_dd(new Date())
+  const today = new Date(); today.setHours(0,0,0,0)
+  const early = new Date(today); early.setDate(early.getDate() + 2)
   return yyyy_mm_dd(early)
 })
 
-// form validation guard
+// form validation: disallow past dates and enforce advance-days rule (unless emergency)
 const canSubmit = computed(() => {
   if (!from.value || !reason.value) return false
-  const start = new Date(from.value); start.setHours(0,0,0,0)
-  const minAllowed = new Date(minStartForForm.value); minAllowed.setHours(0,0,0,0)
-  if (start < minAllowed) return false
-  if (to.value) {
-    const end = new Date(to.value); end.setHours(0,0,0,0)
-    if (end < start) return false
-  }
+  // prevent requesting start date in the past
+  if (new Date(from.value) < new Date(minDateToday)) return false
+  // enforce advance notice for normal requests
+  if (!isEmergency.value && new Date(from.value) < new Date(minStartForForm.value)) return false
+  // end >= start when provided
+  if (to.value && new Date(to.value) < new Date(from.value)) return false
   return true
 })
 
-// ========== helpers ==========
+/* utility functions (existing) */
 function leaveStatusTH(s){
   if (s === 'PENDING') return 'รออนุมัติ'
   if (s === 'APPROVED') return 'อนุมัติแล้ว'
@@ -313,7 +239,7 @@ function formatRange(f, t){
   return `${a.getDate()}/${a.getMonth()+1}/${a.getFullYear()+543} - ${b.getDate()}/${b.getMonth()+1}/${b.getFullYear()+543}`
 }
 
-// filter ประวัติ
+/* filtered history */
 const filteredLeaves = computed(() => {
   const kw = q.value.trim().toLowerCase()
   const arr = Array.isArray(leaves.value) ? leaves.value : []
@@ -324,127 +250,58 @@ const filteredLeaves = computed(() => {
   )
 })
 
-/* ---------- ดึง "งานวันนี้ของฉัน" จาก assignments ---------- */
-function dayRangeISO(dStr) {
-  const d = new Date(dStr)
-  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
-  const end = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1, 0, 0, 0, 0)
-  return { start: start.toISOString(), end: end.toISOString() }
-}
-
-function mkTimeRange(s,e){
-  if(!s||!e) return ''
-  const opt={hour:'2-digit',minute:'2-digit'}
-  const d1=new Date(s), d2=new Date(e)
-  const sameDay = d1.toDateString()===d2.toDateString()
-  const dateStr = d1.toLocaleDateString()
-  const rangeStr = `${d1.toLocaleTimeString([],opt)} - ${d2.toLocaleTimeString([],opt)}`
-  return sameDay ? `${dateStr} ${rangeStr}` : `${d1.toLocaleString([],opt)} ➜ ${d2.toLocaleString([],opt)}`
-}
-
-async function fetchTodayTasks(){
-  tasksLoading.value = true
-  tasksToday.value = []
-  selectedTasks.value = []
+/* API: load leaves & me */
+async function fetchMe(){
   try {
-    // ต้องมี me.id เพื่อกรองงานของฉัน
-    if (!me.value?.id) await fetchMe()
-    const { start, end } = dayRangeISO(todayISO.value)
-    const res = await api.get('/api/notetakers/assignments', { params: { start, end, withUsers: 1 } })
-    const items = Array.isArray(res?.data?.items) ? res.data.items : []
-    // กรองเฉพาะงานที่มีชื่อฉันอยู่ใน noteTakers
-    const mine = items.filter(b => (b.noteTakers||[]).some(nt => Number(nt.user?.id ?? nt.userId) === Number(me.value.id)))
-    tasksToday.value = mine.map(b => ({
-      id: b.id,
-      bookingId: b.id,
-      title: b.room?.roomName ? `ห้อง ${b.room.roomName}` : `Booking #${b.id}`,
-      startTime: b.startTime,
-      endTime: b.endTime,
-      roomName: b.room?.roomName ?? '',
-      timeRange: mkTimeRange(b.startTime, b.endTime),
-    }))
-  } catch (e) {
-    console.warn('fetchTodayTasks', e)
-    tasksToday.value = []
-  } finally {
-    tasksLoading.value = false
-  }
+    const { data } = await api.get('/api/auth/me')
+    if (data) {
+      me.value = {
+        id: data.id ?? data.userId ?? data.sub,
+        name: data.name ?? data.fullName ?? me.value.name,
+        fullName: data.fullName ?? data.name ?? me.value.fullName,
+        email: data.email ?? me.value.email,
+        avatarUrl: data.avatarUrl ?? me.value.avatarUrl
+      }
+    }
+  } catch (_) {}
 }
 
-// when emergency toggled on, load today's tasks automatically
-watch(isEmergency, (v) => {
-  if (v) fetchTodayTasks()
-  else {
-    tasksToday.value = []
-    selectedTasks.value = []
-  }
-})
-
-/* ========== โหลด Leaves + Requests + Me ========== */
 async function load(){
   loading.value = true
   fetchError.value = ''
   try{
     await fetchMe()
-    // default: ย้อนหลัง 60 วัน ถึง อีก 60 วัน
     const today = new Date()
     const start = new Date(today); start.setDate(start.getDate() - 60)
     const end   = new Date(today); end.setDate(end.getDate() + 60)
 
-    const [leRes, reqRes] = await Promise.all([
-      api.get('/api/notetakers/leaves', { params: { start: yyyy_mm_dd(start), end: yyyy_mm_dd(end) } }),
-      api.get('/api/notetakers/requests')
-    ])
-
-    leaves.value   = Array.isArray(leRes.data?.items) ? leRes.data.items : []
-    requests.value = Array.isArray(reqRes.data?.items) ? reqRes.data.items : []
+    const res = await api.get('/api/notetakers/leaves', { params: { start: yyyy_mm_dd(start), end: yyyy_mm_dd(end) } })
+    leaves.value = Array.isArray(res.data?.items) ? res.data.items : []
   } catch(e){
     console.error('load leaves', e)
     fetchError.value = e?.response?.data?.error || e.message || 'load failed'
-  } finally { loading.value = false }
+  } finally {
+    loading.value = false
+  }
 }
 
-/** ส่งลาแบบช่วงวัน → แปลงเป็น daily leave: POST /api/notetakers/leaves ทีละวัน
- *  ถ้าเป็น "ฉุกเฉิน" และเลือกงานไว้ จะสร้าง /requests สำหรับแต่ละงานด้วย
- */
+/* submit - enforce no-backdate and advance rule on server side too (client double-check) */
 async function submitLeave(){
   if (!canSubmit.value) {
-    await Swal.fire({ icon:'warning', title:'ข้อมูลไม่ครบหรือวันที่ไม่ถูกต้อง', text: 'กรุณากรอกวันที่และเหตุผลให้ถูกต้องตามเงื่อนไข' })
+    await Swal.fire({ icon:'warning', title:'ข้อมูลไม่ครบหรือวันที่ไม่ถูกต้อง', text: `ไม่อนุญาตขอย้อนหลั วหรือวันที่ไม่ผ่านเงื่อนไข` })
     return
   }
 
   submitting.value = true
   try{
     const toVal = to.value || from.value
-    // 1) บันทึก leave รายวัน
-    for (const d of eachDate(from.value, toVal)) {
-      await api.post('/api/notetakers/leaves', {
-        date: d,
-        reason: reason.value,
-        emergency: !!isEmergency.value,
-      })
+    // ใช้ endpoint เดี่ยว /leave ซึ่งรับ { date, reason }
+    for (const d of (function* (aStr, bStr){ const a=new Date(aStr), b=new Date(bStr); for (let dt=new Date(a); dt<=b; dt.setDate(dt.getDate()+1)) yield yyyy_mm_dd(dt) })(from.value, toVal)) {
+      await api.post('/api/notetakers/leave', { date: d, reason: reason.value })
     }
 
-    // 2) สำหรับฉุกเฉิน: ถ้าเลือกงานวันนี้ไว้ ให้สร้างคำขอหา "คนแทน" เชื่อม bookingId
-    if (isEmergency.value && selectedTasks.value.length) {
-      const byId = Object.fromEntries(tasksToday.value.map(t => [t.id, t]))
-      for (const tid of selectedTasks.value) {
-        const t = byId[tid]
-        if (!t) continue
-        await api.post('/api/notetakers/requests', {
-          start: t.startTime,
-          end: t.endTime,
-          bookingId: t.bookingId,
-          // targetUserId: ไม่จำเป็นต้องใส่ ให้ระบบไปหา candidate ตามคิว/เงื่อนไข
-        })
-      }
-      // แจ้งให้หน้า Substitute Manager รีโหลด
-      window.dispatchEvent(new Event('notetakers:requests:changed'))
-    }
-
-    // reset form
+    // reset
     from.value = ''; to.value = ''; reason.value = ''; isEmergency.value = false
-    tasksToday.value = []; selectedTasks.value = []
     await load()
     Swal.fire({ toast:true, position:'top-end', icon:'success', title:'ส่งคำลาแล้ว', timer:1400, showConfirmButton:false })
   } catch(e){
@@ -453,45 +310,6 @@ async function submitLeave(){
     await Swal.fire({ icon:'error', title:'ส่งไม่สำเร็จ', text: fetchError.value })
   } finally {
     submitting.value = false
-  }
-}
-
-/* ---------- New Request (manual) ---------- */
-async function newRequest(){
-  const today = new Date(); today.setHours(0,0,0,0)
-  const minDate = yyyy_mm_dd(today)
-  const { value: formValues, isConfirmed } = await Swal.fire({
-    title: 'ขอความช่วยเหลือ/แทนที่',
-    html: `
-      <input id="swal-start" type="date" class="swal2-input" min="${minDate}" placeholder="จากวันที่ (YYYY-MM-DD)">
-      <input id="swal-end" type="date" class="swal2-input" min="${minDate}" placeholder="ถึงวันที่ (YYYY-MM-DD)">
-    `,
-    focusConfirm: false,
-    showCancelButton: true,
-    preConfirm: () => {
-      const s = (document.getElementById('swal-start') || {}).value || ''
-      const e = (document.getElementById('swal-end')   || {}).value || ''
-      if (!s) {
-        Swal.showValidationMessage('กรุณาระบุวันที่เริ่ม')
-        return false
-      }
-      if (e && new Date(e) < new Date(s)) {
-        Swal.showValidationMessage('วันที่สิ้นสุดต้องไม่อยู่ก่อนวันที่เริ่ม')
-        return false
-      }
-      return { start: s, end: e }
-    }
-  })
-  if (!isConfirmed || !formValues) return
-  try{
-    await api.post('/api/notetakers/requests', { start: formValues.start, end: formValues.end })
-    Swal.fire({ icon: 'success', title: 'ส่งคำขอแล้ว' })
-    const res = await api.get('/api/notetakers/requests')
-    requests.value = res.data?.items || []
-    window.dispatchEvent(new Event('notetakers:requests:changed'))
-  }catch(e){
-    console.error('newRequest', e)
-    Swal.fire({ icon: 'error', title: 'ไม่สำเร็จ', text: e?.response?.data?.error || e?.message })
   }
 }
 
@@ -506,13 +324,10 @@ async function cancelLeave(dateIso){
   if (!ok.isConfirmed) return
 
   try {
-    // ส่งแบบ YYYY-MM-DD ตาม backend
     let dateParam = dateIso
     const dt = new Date(dateIso)
-    if (!Number.isNaN(dt.getTime())) {
-      dateParam = yyyy_mm_dd(dt)
-    }
-    await api.delete('/api/notetakers/leaves', { params: { date: dateParam } })
+    if (!Number.isNaN(dt.getTime())) dateParam = yyyy_mm_dd(dt)
+    await api.delete('/api/notetakers/leave', { params: { date: dateParam } })
     await load()
     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'ยกเลิกแล้ว', timer: 1200, showConfirmButton: false })
   } catch (e) {
@@ -530,6 +345,9 @@ async function logout(){
 }
 
 onMounted(load)
+watch(isEmergency, (v) => {
+  // no extra UI complexity here; keep simple
+})
 </script>
 
 <style scoped>

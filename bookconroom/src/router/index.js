@@ -13,6 +13,7 @@ import RoomUse from '@/components/RoomUse.vue'
 import RoomStatus from '@/components/RoomStatus.vue'
 import Report from '@/components/Report.vue'
 import MyInvites from '@/components/MyInvites.vue'
+import RoomInfo from '@/components/RoomInfo.vue'
 
 // Admin pages
 import AdminDashboardModern from '@/page/admin/AdminDashboardModern.vue'
@@ -53,6 +54,7 @@ const routes = [
   { path: '/room-status', component: RoomStatus, meta: { requiresAuth: true } },
   { path: '/report', component: Report, meta: { requiresAuth: true } },
   { path: '/my-invites', component: MyInvites, meta: { requiresAuth: true } },
+  {path: '/room-info/:id', component: RoomInfo,  meta: { requiresAuth: true }},
 
   // admin
   { path: '/admin', redirect: '/admin/dashboard-modern' },
@@ -93,7 +95,7 @@ const routes = [
   }
 },
   // Manager/Admin เท่านั้น
-  { path: '/note-taker/dashboard', name: 'NoteTakerDashboard', component: NoteTakerDashboard, meta: { requiresAuth: true, roleReq: 'NOTE_MANAGER' } },
+  { path: '/note-taker/dashboard', name: 'NoteTakerDashboard', component: NoteTakerDashboard, meta: { requiresAuth: true, roleReq: 'NOTE_ROLE' } },
   { path: '/note-taker/substitute', name: 'NoteTakerSubstitute', component: SubstituteManager, meta: { requiresAuth: true, roleReq: 'NOTE_MANAGER' } },
   // สมาชิกทีมจด (Admin/Manager/NoteTaker)
   { path: '/note-taker/my-queue', name: 'NoteTakerMyQueue', component: NoteTakerMyQueue, meta: { requiresAuth: true, roleReq: 'NOTE_ROLE' } },

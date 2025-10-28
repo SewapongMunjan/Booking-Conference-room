@@ -22,9 +22,13 @@
             <span class="text-lg">🏠</span>
             <span class="text-sm">หน้าแรก</span>
           </router-link>
-          <router-link to="/booking" class="nav-link nav-active">
+          <router-link to="/booking" class="nav-link" :class="$route.path.startsWith('/booking') ? 'nav-active' : ''">
             <span class="text-lg">📅</span>
             <span class="text-sm">จองห้องประชุม</span>
+          </router-link>
+          <router-link  to="/room-info/:id" class="nav-link" :class="$route.path === '/room-info/:id' ? 'nav-active' : ''">
+            <span class="text-lg">🛋️</span>
+            <span class="text-sm">ข้อมูลห้องประชุม</span>
           </router-link>
           <router-link to="/booking-list" class="nav-link" :class="$route.path === '/booking-list' ? 'nav-active' : ''">
             <span class="text-lg">📋</span>
@@ -220,12 +224,15 @@
             </div>
           </router-link>
         </div>
-        <nav class="p-2 space-y-1">
+         <nav class="p-2 space-y-1">
           <router-link to="/" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">🏠</span> <span class="text-sm">หน้าแรก</span>
           </router-link>
           <router-link to="/booking" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">📅</span> <span class="text-sm">จองห้องประชุม</span>
+          </router-link>
+          <router-link to="/room-info/:id" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">🛋️</span> <span class="text-sm">ข้อมูลห้องประชุม</span>
           </router-link>
           <router-link to="/booking-list" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">📋</span> <span class="text-sm">รายการจองของฉัน</span>
@@ -1361,19 +1368,19 @@ function generateRoomDetails(r) {
   // mapping: ให้ลิงก์ชัดเจนตาม bucket (ไม่ต่อสตริงผิด ๆ)
   const imagesMap = {
     30: [
-      'https://i.ibb.co/5WyLf7xn/30-1.png',
+      'https://i.ibb.co/fYZY2Lvw/30-new.jpg',
       'https://i.ibb.co/bR2Gdhnn/30-2.png',
       'https://i.ibb.co/jP9yCDXc/30-3.jpg'
     ],
     50: [
-      'https://i.ibb.co/whX6JWBD/50-1.png',
-      'https://i.ibb.co/nNswbMch/50-2.png',
+      'https://i.ibb.co/LXsn50Zg/50-new.jpg',
+      'https://i.ibb.co/N6ctPt9Q/50-2-new.jpg',
       'https://i.ibb.co/RpKRg2j1/50-3.png'
     ],
     100: [
-      'https://i.ibb.co/Fk45j2TN/100-1.png',
-      'https://i.ibb.co/k22NY0j2/100-2.jpg',
-      'https://i.ibb.co/Sg8jz7G/100-3.jpg'
+      'https://i.ibb.co/ynYrXvs4/100-new.jpg',
+      'https://i.ibb.co/LXMmPRw3/100-2-new.jpg',
+      'https://i.ibb.co/HLcMsGcB/100-3-new.jpg'
     ]
   }
 

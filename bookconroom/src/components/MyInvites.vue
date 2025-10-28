@@ -22,9 +22,13 @@
             <span class="text-lg">🏠</span>
             <span class="text-sm">หน้าแรก</span>
           </router-link>
-          <router-link to="/booking" class="nav-link" :class="$route.path === '/booking' ? 'nav-active' : ''">
+          <router-link to="/booking" class="nav-link" :class="$route.path.startsWith('/booking') ? 'nav-active' : ''">
             <span class="text-lg">📅</span>
             <span class="text-sm">จองห้องประชุม</span>
+          </router-link>
+          <router-link  to="/room-info/:id" class="nav-link" :class="$route.path === '/room-info/:id' ? 'nav-active' : ''">
+            <span class="text-lg">🛋️</span>
+            <span class="text-sm">ข้อมูลห้องประชุม</span>
           </router-link>
           <router-link to="/booking-list" class="nav-link" :class="$route.path === '/booking-list' ? 'nav-active' : ''">
             <span class="text-lg">📋</span>
@@ -42,7 +46,7 @@
             <span class="text-lg">⚠️</span>
             <span class="text-sm">แจ้งปัญหา</span>
           </router-link>
-          <router-link to="/my-invites" class="nav-link nav-active">
+          <router-link to="/my-invites" class="nav-link" :class="$route.path === '/my-invites' ? 'nav-active' : ''">
             <span class="text-lg">📨</span>
             <span class="text-sm">คำเชิญของฉัน</span>
           </router-link>
@@ -206,12 +210,15 @@
             </div>
           </router-link>
         </div>
-        <nav class="p-2 space-y-1">
+         <nav class="p-2 space-y-1">
           <router-link to="/" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">🏠</span> <span class="text-sm">หน้าแรก</span>
           </router-link>
           <router-link to="/booking" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">📅</span> <span class="text-sm">จองห้องประชุม</span>
+          </router-link>
+          <router-link to="/room-info/:id" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">🛋️</span> <span class="text-sm">ข้อมูลห้องประชุม</span>
           </router-link>
           <router-link to="/booking-list" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">📋</span> <span class="text-sm">รายการจองของฉัน</span>

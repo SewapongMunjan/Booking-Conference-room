@@ -26,6 +26,10 @@
             <span class="text-lg">📅</span>
             <span class="text-sm">จองห้องประชุม</span>
           </router-link>
+          <router-link  to="/room-info/:id" class="nav-link" :class="$route.path === '/room-info/:id' ? 'nav-active' : ''">
+            <span class="text-lg">🛋️</span>
+            <span class="text-sm">ข้อมูลห้องประชุม</span>
+          </router-link>
           <router-link to="/booking-list" class="nav-link" :class="$route.path === '/booking-list' ? 'nav-active' : ''">
             <span class="text-lg">📋</span>
             <span class="text-sm">รายการจองของฉัน</span>
@@ -220,12 +224,15 @@
             </div>
           </router-link>
         </div>
-        <nav class="p-2 space-y-1">
+         <nav class="p-2 space-y-1">
           <router-link to="/" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">🏠</span> <span class="text-sm">หน้าแรก</span>
           </router-link>
           <router-link to="/booking" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">📅</span> <span class="text-sm">จองห้องประชุม</span>
+          </router-link>
+          <router-link to="/room-info/:id" class="mobile-nav-link" @click="showMobileMenu = false">
+            <span class="text-lg">🛋️</span> <span class="text-sm">ข้อมูลห้องประชุม</span>
           </router-link>
           <router-link to="/booking-list" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">📋</span> <span class="text-sm">รายการจองของฉัน</span>
@@ -411,6 +418,28 @@
                   </ul>
                 </div>
               </div>
+
+              <!-- NEW: Rooms quick list (click -> RoomInfo) -->
+              <div class="modern-card shadow-md">
+                <div class="flex items-center justify-between mb-4">
+                  <h4 class="font-semibold text-gray-900 text-base">ตัวอย่างห้องประชุม</h4>
+                  <RouterLink to="/rooms" class="text-sm font-medium text-blue-600 hover:text-blue-700">ดูทั้งหมด →</RouterLink>
+                </div>
+
+                <div class="grid grid-cols-1 gap-3">
+                  <div v-for="r in rooms" :key="r.id" class="bg-white border rounded-lg p-3 flex items-center gap-3">
+                    <RouterLink :to="{ path: '/room-info', query: { id: r.id } }" class="flex items-center gap-3 no-underline">
+                      <img :src="r.image" alt="room" class="w-20 h-14 object-cover rounded-md border" />
+                      <div class="min-w-0">
+                        <div class="font-medium text-sm text-gray-900 truncate">{{ r.roomName }}</div>
+                        <div class="text-xs text-gray-500">ความจุ {{ r.capacity }} คน</div>
+                      </div>
+                    </RouterLink>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ...existing right column cards (summary, calendar) ... -->
             </div>
           </div>
         </div>
