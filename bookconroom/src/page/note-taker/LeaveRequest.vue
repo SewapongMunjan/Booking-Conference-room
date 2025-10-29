@@ -74,7 +74,7 @@
               <input
                 type="date"
                 v-model="from"
-                :min="minDateToday"
+                :min="minStartForForm"
                 class="w-full mt-1 mb-3 p-2 border rounded-md"
               />
 
@@ -82,17 +82,22 @@
               <input
                 type="date"
                 v-model="to"
-                :min="from || minDateToday"
+                :min="from || minStartForForm"
                 class="w-full mt-1 mb-3 p-2 border rounded-md"
               />
 
-              <div class="text-xs text-gray-500 mb-3">
-                หมายเหตุ:
+              <!-- validation hint -->
+              <div class="text-xs mt-1 mb-3">
                 <template v-if="isEmergency">
-                  ลากระทันหันสามารถเริ่มได้ตั้งแต่วันนี้
+                  <span class="text-gray-500">ลากระทันหันสามารถเริ่มได้ตั้งแต่วันนี้ ({{ todayISO }})</span>
                 </template>
                 <template v-else>
-                  คำขอปกติ: ต้องส่งล่วงหน้าอย่างน้อย 2 วัน (ไม่สามารถขอย้อนหลังได้)
+                  <span class="text-rose-600" v-if="from && new Date(from) < new Date(minStartForForm)">
+                    ต้องลาล่วงหน้าอย่างน้อย 2 วัน — วันเริ่มขั้นต่ำ: {{ minStartForForm }}
+                  </span>
+                  <span class="text-gray-500" v-else>
+                    คำขอปกติ: ต้องส่งล่วงหน้าอย่างน้อย 2 วัน (ไม่สามารถขอย้อนหลังได้)
+                  </span>
                 </template>
               </div>
 
@@ -347,6 +352,15 @@ async function logout(){
 onMounted(load)
 watch(isEmergency, (v) => {
   // no extra UI complexity here; keep simple
+  // ensure from date auto-adjust when switching from emergency -> normal
+  if (!v && from.value) {
+    // if current from is earlier than allowed, bump it up
+    try {
+      if (new Date(from.value) < new Date(minStartForForm.value)) {
+        from.value = minStartForForm.value
+      }
+    } catch (_) {}
+  }
 })
 </script>
 
