@@ -767,6 +767,9 @@ const onBookingsChanged = () => {
 }
 
 onMounted(async () => {
+  // set page title (browser tab)
+  document.title = 'Home'
+
   updateDateTime()
   clockTimer = setInterval(updateDateTime, 1000)
 

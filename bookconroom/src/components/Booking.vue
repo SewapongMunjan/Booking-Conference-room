@@ -1415,7 +1415,6 @@ function openEquipment(eq) {
   if (src) window.open(src, '_blank')
 }
 
-// computed selectedRoomDetails
 const selectedRoomDetails = computed(() => {
   if (!selectedRoom.value) return null
   if (selectedRoom.value.details) return selectedRoom.value.details

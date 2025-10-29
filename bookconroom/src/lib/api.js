@@ -23,6 +23,14 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     const status = err?.response?.status;
+    const req = err?.config || {};
+    const url = (req.url || "").toLowerCase();
+
+    // ถ้าเป็น 401/403 ที่มาจาก login ให้ reject เพื่อให้ component แสดงข้อความ (ไม่ redirect)
+    if ((status === 401 || status === 403) && (url.includes("/auth/login") || url.endsWith("/login"))) {
+      return Promise.reject(err);
+    }
+
     if ((status === 401 || status === 403) && !isRedirecting) {
       isRedirecting = true;
       // ล้าง token แล้วพาไปล็อกอิน
