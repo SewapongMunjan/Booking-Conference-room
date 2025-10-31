@@ -334,24 +334,28 @@
                           <span v-if="minTime" class="text-xs text-orange-600 ml-1">(ขั้นต่ำ {{ minTime }})</span>
                         </label>
                         <input
-                          type="time"
-                          v-model="startTimeOnly"
-                          :min="minTime"
-                          :disabled="!dateOnly || wholeDay"
-                          step="60"
-                          class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:bg-gray-50"
-                        />
+  type="time"
+  lang="th-TH"
+  inputmode="numeric"
+  v-model="startTimeOnly"
+  :min="minTime"
+  :disabled="!dateOnly || wholeDay"
+  step="60"
+  class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:bg-gray-50"
+/>
                       </div>
                       <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">เวลาสิ้นสุด</label>
                         <input
-                          type="time"
-                          v-model="endTimeOnly"
-                          :min="startTimeOnly || minTime"
-                          :disabled="!dateOnly || wholeDay"
-                          step="60"
-                          class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:bg-gray-50"
-                        />
+  type="time"
+  lang="th-TH"
+  inputmode="numeric"
+  v-model="endTimeOnly"
+  :min="startTimeOnly || minTime"
+  :disabled="!dateOnly || wholeDay"
+  step="60"
+  class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:bg-gray-50"
+/>
                       </div>
                     </div>
 
@@ -740,7 +744,7 @@ async function fetchNotifications() {
 function formatTime (iso) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+  return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short', hour12: false })
 }
 
 function toggleNotif () {
@@ -866,11 +870,12 @@ watch(wholeDay, (on) => {
 /* ---------- schedule ---------- */
 const roomSchedule = ref([])
 
+
 function fmtTime (iso) {
   try { 
     const d = new Date(iso)
     if (isNaN(d.getTime())) return '-'
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false })
   } catch { 
     return '-' 
   }

@@ -139,8 +139,8 @@ const statusTabs = [
 
 const sidebarItems = [
   { to: '/housekeeping/dashboard', label: 'Dashboard', icon: '🏠' },
-  { to: '/housekeeping/tasks', label: 'งานทั้งหมด', icon: '🧾' },
-  { to: '/housekeeping/complete',  label: 'งานที่เสร็จสมบูรณ์', icon: '✅' },
+  { to: '/housekeeping/tasks',     label: 'งานบริการเสริม', icon: '🧾' },
+  { to: '/housekeeping/complete',  label: 'งานทำความสะอาด', icon: '🧹' },
 ]
 
 function isActive(item) {
