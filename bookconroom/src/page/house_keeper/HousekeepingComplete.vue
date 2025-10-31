@@ -87,7 +87,7 @@
               <button
                 v-if="showStart(b)"
                 @click="startCleaning(b)"
-                class="px-3 py-2 text-xs rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                class="px-3 py-2.5 bg-green-600 text-white rounded text-sm"
                 :disabled="savingId === b.bookingId"
               >
                 เริ่มทำความสะอาด
