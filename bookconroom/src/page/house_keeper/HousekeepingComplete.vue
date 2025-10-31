@@ -14,8 +14,8 @@
 
       <nav class="p-3 space-y-1">
         <router-link to="/housekeeping/dashboard" class="nav-link">🏠 Dashboard</router-link>
-        <router-link to="/housekeeping/tasks" class="nav-link">🧾 งานทั้งหมด</router-link>
-        <router-link to="/housekeeping/complete" class="nav-link nav-active">🧹 ทุกห้องที่ถูกจอง</router-link>
+        <router-link to="/housekeeping/tasks" class="nav-link">🧾 งานบริการเสริม</router-link>
+        <router-link to="/housekeeping/complete" class="nav-link nav-active">🧹 งานทำความสะอาด</router-link>
       </nav>
     </aside>
 

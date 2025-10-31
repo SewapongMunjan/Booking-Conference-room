@@ -26,7 +26,8 @@
             <span class="text-lg">📅</span>
             <span class="text-sm">จองห้องประชุม</span>
           </router-link>
-          <router-link  to="/room-info/:id" class="nav-link" :class="$route.path === '/room-info/:id' ? 'nav-active' : ''">
+          <!-- เปลี่ยนเป็น /room-info (ไม่ใช้ :id literal) -->
+          <router-link to="/room-info" class="nav-link" :class="$route.path.startsWith('/room-info') ? 'nav-active' : ''">
             <span class="text-lg">🛋️</span>
             <span class="text-sm">ข้อมูลห้องประชุม</span>
           </router-link>
@@ -74,9 +75,7 @@
             🏢
           </div>
           <div>
-            <h2 class="text-lg font-semibold text-gray-900 m-0">
-              ระบบจองห้องประชุม
-            </h2>
+            <h2 class="text-lg font-semibold text-gray-900 m-0">ระบบจองห้องประชุม</h2>
             <p class="text-xs text-gray-500 m-0 hidden sm:block lg:hidden">Meeting Room Booking System</p>
           </div>
         </div>
@@ -85,9 +84,9 @@
         <div class="flex items-center gap-3">
           <!-- Search -->
           <div class="hidden lg:block relative">
-            <input 
-              type="search" 
-              placeholder="ค้นหา..." 
+            <input
+              type="search"
+              placeholder="ค้นหา..."
               class="w-64 pl-10 pr-4 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             />
             <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,14 +223,14 @@
             </div>
           </router-link>
         </div>
-         <nav class="p-2 space-y-1">
+        <nav class="p-2 space-y-1">
           <router-link to="/" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">🏠</span> <span class="text-sm">หน้าแรก</span>
           </router-link>
           <router-link to="/booking" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">📅</span> <span class="text-sm">จองห้องประชุม</span>
           </router-link>
-          <router-link to="/room-info/:id" class="mobile-nav-link" @click="showMobileMenu = false">
+          <router-link to="/room-info" class="mobile-nav-link" @click="showMobileMenu = false">
             <span class="text-lg">🛋️</span> <span class="text-sm">ข้อมูลห้องประชุม</span>
           </router-link>
           <router-link to="/booking-list" class="mobile-nav-link" @click="showMobileMenu = false">
@@ -290,7 +289,7 @@
                 อัปเดต: {{ currentTime }}
               </span>
             </div>
-            
+
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
               <div class="stat-card bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 shadow-md hover:shadow-lg transition-shadow">
                 <div class="flex items-center justify-between mb-4">
@@ -419,7 +418,7 @@
                 </div>
               </div>
 
-              <!-- NEW: Rooms quick list (click -> RoomInfo) -->
+              <!-- Rooms quick list -->
               <div class="modern-card shadow-md">
                 <div class="flex items-center justify-between mb-4">
                   <h4 class="font-semibold text-gray-900 text-base">ตัวอย่างห้องประชุม</h4>
@@ -427,19 +426,18 @@
                 </div>
 
                 <div class="grid grid-cols-1 gap-3">
-                  <div v-for="r in rooms" :key="r.id" class="bg-white border rounded-lg p-3 flex items-center gap-3">
+                  <div v-for="r in roomsSample" :key="r.id" class="bg-white border rounded-lg p-3 flex items-center gap-3">
                     <RouterLink :to="{ path: '/room-info', query: { id: r.id } }" class="flex items-center gap-3 no-underline">
                       <img :src="r.image" alt="room" class="w-20 h-14 object-cover rounded-md border" />
                       <div class="min-w-0">
                         <div class="font-medium text-sm text-gray-900 truncate">{{ r.roomName }}</div>
-                        <div class="text-xs text-gray-500">ความจุ {{ r.capacity }} คน</div>
+                        <div class="text-xs text-gray-500">ความจุ {{ r.capacity || '-' }} คน</div>
                       </div>
                     </RouterLink>
                   </div>
                 </div>
               </div>
 
-              <!-- ...existing right column cards (summary, calendar) ... -->
             </div>
           </div>
         </div>
@@ -448,8 +446,9 @@
   </div>
 </template>
 
+
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
 
@@ -553,9 +552,23 @@ function handleClickOutside (e) {
   if (!dropdown.contains(e.target) && !(bellBtn && bellBtn.contains(e.target))) showNotif.value = false
 }
 
+/** ===== Helpers: ตัดเส้นวันแบบไทย (UTC+7) บนฝั่งหน้า ===== */
+function thaiDayRange(d = new Date()) {
+  // สร้างช่วง 00:00:00 ถึง 23:59:59.999 ของ "เวลาโลคอล" (ซึ่งเป็นเวลาไทยในเครื่องคุณ)
+  const start = new Date(d); start.setHours(0,0,0,0)
+  const end   = new Date(d); end.setHours(23,59,59,999)
+  return { start, end }
+}
+function inThaiToday(startIso) {
+  if (!startIso) return false
+  const t = new Date(startIso)
+  if (Number.isNaN(t.getTime())) return false
+  const { start, end } = thaiDayRange(new Date())
+  return t >= start && t <= end
+}
+
 /** ===== KPI & Chart ===== */
 const kpi = ref({ total: 0, approved: 0, pending: 0, cancelled: 0 })
-const deltas = ref({ approved: 0, pending: 0 })
 const days = ref(7)
 const chartData = ref([])
 
@@ -588,7 +601,8 @@ async function loadRecentAndChart() {
   try {
     const since = new Date()
     since.setDate(since.getDate() - days.value)
-    const res = await api.get('/api/bookings', { params: { page: 1, pageSize: 500, start_gte: since.toISOString() } })
+    // ถ้าแบ็กเอนด์ไม่รองรับ start_gte ก็ยังได้รายการทั้งหมด แล้วเราจัดกลุ่มเองได้
+    const res = await api.get('/api/bookings', { params: { page: 1, pageSize: 1000, start_gte: since.toISOString() } })
     const list = Array.isArray(res?.data?.items) ? res.data.items : (Array.isArray(res?.data) ? res.data : [])
     chartData.value = groupByDate(list, Math.min(days.value, 30))
   } catch (e) {
@@ -597,73 +611,32 @@ async function loadRecentAndChart() {
   }
 }
 
-/** โหลด KPI: ลองหลาย endpoint+พารามิเตอร์ และ fallback นับเองจาก /api/bookings */
+/** โหลด KPI: ดึงรายการครั้งเดียว แล้ว "กรองเฉพาะวันนี้ (ไทย)" ที่ฝั่งหน้า */
 async function loadKpi() {
-  const now = new Date()
-  const startOfDay = new Date(now); startOfDay.setHours(0,0,0,0)
-  const endOfDay   = new Date(now); endOfDay.setHours(23,59,59,999)
+  try {
+    const r = await api.get('/api/bookings', { params: { page: 1, pageSize: 1000 } })
+    const items = r?.data?.items ?? r?.data ?? []
+    if (!Array.isArray(items)) { kpi.value = { total: 0, approved: 0, pending: 0, cancelled: 0 }; return }
 
-  const paramsCandidates = [
-    { date: startOfDay.toISOString().slice(0,10) },
-    { on:   startOfDay.toISOString().slice(0,10) },
-    { from: startOfDay.toISOString(), to: endOfDay.toISOString() },
-    { start_gte: startOfDay.toISOString(), end_lte: endOfDay.toISOString() },
-    { dateFrom: startOfDay.toISOString().slice(0,10), dateTo: endOfDay.toISOString().slice(0,10) },
-  ]
-  const endpoints = [
-    ['/api/stats/bookings'],
-    ['/api/stats'],
-    ['/api/bookings/stats'],
-    ['/api/bookings/summary'],
-  ]
+    const todayItems = items.filter(b => inThaiToday(b.startAt ?? b.startTime ?? b.start ?? b.from))
 
-  let res = null
-  outer: for (const [url] of endpoints) {
-    for (const p of paramsCandidates) {
-      try {
-        const r = await api.get(url, { params: p })
-        if (r?.status === 200) { res = r; break outer }
-      } catch (_) {}
+    const isApproved = (s) => ['APPROVED','CONFIRMED','ACCEPTED'].includes(String(s||'').toUpperCase())
+    const isPending  = (s) => ['PENDING','REQUESTED','AWAITING','AWAITING_ATTENDEE_CONFIRM','AWAITING_CONFIRMATION'].includes(String(s||'').toUpperCase())
+    const isCancel   = (s) => String(s||'').toUpperCase() === 'CANCELLED'
+
+    let total=0, ap=0, pe=0, ca=0
+    for (const it of todayItems) {
+      total++
+      const st = it.status
+      if (isApproved(st)) ap++
+      else if (isPending(st)) pe++
+      else if (isCancel(st)) ca++
     }
+    kpi.value = { total, approved: ap, pending: pe, cancelled: ca }
+  } catch (e) {
+    console.error('loadKpi', e)
+    kpi.value = { total: 0, approved: 0, pending: 0, cancelled: 0 }
   }
-
-  if (res?.data) {
-    const d = res.data
-    kpi.value.total     = d.totalToday ?? d.total ?? d.count ?? d.all ?? 0
-    kpi.value.approved  = d.approved ?? d.approvedCount ?? d.confirmed ?? 0
-    kpi.value.pending   = d.pending ?? d.pendingCount ?? d.waiting ?? d.awaiting ?? 0
-    kpi.value.cancelled = d.cancelled ?? d.cancelledCount ?? 0
-    deltas.value.approved = d.deltaApproved ?? d.approvedDelta ?? 0
-    deltas.value.pending  = d.deltaPending  ?? d.pendingDelta  ?? 0
-    return
-  }
-
-  // fallback: ดึงรายการแล้วนับเอง
-  let list = []
-  for (const p of paramsCandidates) {
-    try {
-      const r = await api.get('/api/bookings', { params: { page: 1, pageSize: 500, ...p } })
-      const raw = r?.data?.items ?? r?.data ?? []
-      list = Array.isArray(raw) ? raw : []
-      if (list.length) break
-    } catch (_) {}
-  }
-
-  const inToday = (b) => {
-    const s = new Date(b.startAt ?? b.startTime ?? b.start ?? b.from)
-    if (Number.isNaN(s.getTime())) return false
-    return s >= startOfDay && s <= endOfDay
-  }
-  const items = list.filter(inToday)
-
-  const isApproved = (s) => ['APPROVED','CONFIRMED','ACCEPTED'].includes(String(s||'').toUpperCase())
-  const isPending  = (s) => ['PENDING','REQUESTED','AWAITING_ATTENDEE_CONFIRM','AWAITING'].includes(String(s||'').toUpperCase())
-  const isCancel   = (s) => String(s||'').toUpperCase() === 'CANCELLED'
-
-  kpi.value.total     = items.length
-  kpi.value.approved  = items.filter(x => isApproved(x.status)).length
-  kpi.value.pending   = items.filter(x => isPending(x.status)).length
-  kpi.value.cancelled = items.filter(x => isCancel(x.status)).length
 }
 
 /** Upcoming */
@@ -706,7 +679,7 @@ async function fetchUpcoming() {
       requester: it.requester || it.user || it.owner || {},
       status: it.status,
       start: it.startAt ?? it.startTime ?? it.start,
-      end: it.endAt ?? it.endTime ?? it.end
+      end: it.endAt   ?? it.endTime   ?? it.end
     })).filter(i => {
       if (!i.start) return false
       const s = new Date(i.start)
@@ -742,7 +715,7 @@ async function fetchComingSoon() {
       requester: it.requester || it.user || it.owner || {},
       status: it.status,
       start: it.startAt ?? it.startTime ?? it.start,
-      end: it.endAt ?? it.endTime ?? it.end
+      end: it.endAt   ?? it.endTime   ?? it.end
     })).filter(i => {
       if (!i.start) return false
       const s = new Date(i.start)
@@ -752,6 +725,26 @@ async function fetchComingSoon() {
   } catch (e) {
     console.error('fetchComingSoon', e); comingSoon.value = []
   } finally { loadingUpcoming.value = false }
+}
+
+/** ===== Rooms (ตัวอย่างห้อง) ===== */
+const rooms = ref([])
+const roomsSample = computed(() => rooms.value.slice(0, 4))
+
+async function fetchRooms() {
+  try {
+    const res = await api.get('/api/rooms', { params: { all: 1 } })
+    const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res?.data?.items) ? res.data.items : [])
+    rooms.value = items.map(r => ({
+      id: r.id,
+      roomName: r.roomName || r.name || `Room ${r.id}`,
+      capacity: r.capacity ?? null,
+      image: r.images?.[0] || r.imageUrl || 'https://picsum.photos/seed/room/320/200'
+    }))
+  } catch (e) {
+    console.error('fetchRooms', e)
+    rooms.value = []
+  }
 }
 
 /** ===== lifecycle ===== */
@@ -775,7 +768,7 @@ onMounted(async () => {
   notiTimer = setInterval(fetchNotifications, 30000)
   document.addEventListener('click', handleClickOutside)
 
-  await Promise.all([loadRecentAndChart(), fetchComingSoon(), fetchUpcoming(), loadKpi()])
+  await Promise.all([fetchRooms(), loadRecentAndChart(), fetchComingSoon(), fetchUpcoming(), loadKpi()])
   window.addEventListener('bookings:changed', onBookingsChanged)
 
   kpiTimer = setInterval(loadKpi, 60000)

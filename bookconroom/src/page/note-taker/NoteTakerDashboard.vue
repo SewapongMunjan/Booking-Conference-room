@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Left sidebar (same as MyQueue) -->
+    <!-- Left sidebar -->
     <aside class="hidden lg:block fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-gray-200 z-50">
       <div class="h-full flex flex-col">
         <div class="p-4 border-b border-gray-200">
@@ -32,15 +32,24 @@
       </div>
     </aside>
 
-    <!-- Header (same as MyQueue) -->
+    <!-- Header -->
     <header class="fixed top-0 right-0 left-0 lg:left-64 z-40 bg-white border-b border-gray-200">
       <div class="w-full px-8 py-4 flex items-center max-w-7xl mx-auto gap-4">
         <h1 class="text-lg font-semibold m-0">แดชบอร์ด NoteTaker</h1>
 
         <div class="ml-auto flex items-center gap-3">
+          <label class="hidden sm:flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" v-model="todayOnly" />
+            แสดงเฉพาะวันนี้
+          </label>
+
           <div class="relative hidden sm:block">
             <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">⌕</span>
-            <input v-model="q" placeholder="ค้นหา ห้อง / ผู้จอง / ผู้จด..." class="w-64 pl-10 pr-3 py-2 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+            <input
+              v-model="q"
+              placeholder="ค้นหา ห้อง / ผู้จอง / ผู้จด..."
+              class="w-64 pl-10 pr-3 py-2 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            />
           </div>
 
           <button class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="load">รีเฟรช</button>
@@ -57,11 +66,11 @@
     <div class="lg:ml-64 pt-20">
       <main class="w-full min-h-[calc(100vh-5rem)] px-8 py-6">
         <div class="max-w-7xl mx-auto space-y-6">
-          <div class="flex items-center gap-4 mb-6">
+          <div class="flex items-center gap-4 mb-2">
             <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-3xl shadow-lg">📝</div>
             <div>
               <h2 class="text-2xl font-bold text-gray-900 m-0">แดชบอร์ด NoteTaker</h2>
-              <p class="text-base text-gray-500 m-0 mt-1">ภาพรวมคิวงานและคำขอ</p>
+              <p class="text-base text-gray-500 m-0 mt-1">ภาพรวมคิวงานและคำขอ <span v-if="todayOnly">— วันนี้ {{ todayTH }}</span></p>
             </div>
           </div>
 
@@ -86,14 +95,20 @@
 
           <section v-else>
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <article v-for="m in filtered" :key="m.id" class="bg-white border rounded-2xl p-5 flex flex-col shadow-sm hover:shadow-md transition">
+              <article
+                v-for="m in filtered"
+                :key="m.id"
+                class="bg-white border rounded-2xl p-5 flex flex-col shadow-sm hover:shadow-md transition"
+              >
                 <div class="flex items-start justify-between">
                   <div class="font-semibold text-lg">{{ m.room?.roomName || m.title || 'ห้องประชุม' }}</div>
-                  <span class="px-2 py-0.5 text-xs rounded-full" :class="badge(m.status)">{{ statusTH(m.status) }}</span>
+                  <span class="px-2 py-0.5 text-xs rounded-full" :class="badge(m.status)">
+                    {{ statusTH(m.status) }}
+                  </span>
                 </div>
 
                 <div class="text-sm text-gray-600 mt-2">
-                  {{ dateTH(m.startTime) }} · {{ timeRange(m.startTime, m.endTime) }}
+                  {{ dateTH(m.start) }} · {{ timeRange(m.start, m.end) }}
                 </div>
 
                 <div class="text-sm text-gray-600 mt-1">
@@ -101,13 +116,26 @@
                 </div>
 
                 <div class="text-sm text-gray-600 mt-1">
-                  คนจดประชุม: <span v-if="(m.noteTakers||[]).length">{{ (m.noteTakers||[]).map(n=>n.name).join(', ') }}</span><span v-else>-</span>
+                  คนจดประชุม:
+                  <span v-if="m.noteTakers?.length">{{ m.noteTakers.map(n => n.name).join(', ') }}</span><span v-else>-</span>
                 </div>
 
                 <div class="mt-4 flex gap-2">
                   <button class="flex-1 px-3 py-2 rounded-lg border text-sm hover:bg-gray-50" @click="view(m)">ดูรายละเอียด</button>
-                  <button v-if="canStart(m)" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700" @click="start(m)">เริ่มจดประชุม</button>
-                  <button v-if="canReport(m)" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700" @click="sendReport(m)">ส่งรายงาน</button>
+
+                  <!-- เริ่มจด → IN_PROGRESS -->
+                  <button
+                    v-if="canStart(m.status)"
+                    class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
+                    @click="markInProgress(m)"
+                  >เริ่มจดประชุม</button>
+
+                  <!-- จบงาน → DONE -->
+                  <button
+                    v-if="canFinish(m.status)"
+                    class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700"
+                    @click="markDone(m)"
+                  >จบงาน</button>
                 </div>
               </article>
 
@@ -129,18 +157,30 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 
 const router = useRouter()
 
-// single logout function
+/* ===== เวลาไทย (UTC+7) ===== */
+function startOfDayTH(d = new Date()) { const x = new Date(d); x.setHours(0,0,0,0); return x }
+function endOfDayTH(d = new Date())   { const x = new Date(d); x.setHours(23,59,59,999); return x }
+const todayTH = computed(() => {
+  const d = new Date()
+  const m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}`
+})
+
+/* ===== logout ===== */
 async function logout() {
-  try { await api.post('/api/logout') } catch { /* ignore */ }
+  try { await api.post('/api/logout') } catch {}
   localStorage.removeItem('access_token')
   localStorage.removeItem('me')
   router.push('/login')
 }
 
+/* ===== state ===== */
 const q = ref('')
+const todayOnly = ref(true)
+
 const requestsCount = ref(0)
-const pendingCount = ref(0)
-const doneCount = ref(0)
+const pendingCount  = ref(0)
+const doneCount     = ref(0)
 
 const loading = ref(true)
 const items = ref([])
@@ -149,48 +189,201 @@ const fetchError = ref('')
 const me = ref({ name: '', email: '', avatarUrl: '' })
 const defaultAvatar = 'https://cdn-icons-png.flaticon.com/128/456/456283.png'
 
+/* ===== mapping & formatting ===== */
+function mapItem(it) {
+  const start = it.startAt ?? it.startTime ?? it.start ?? it.from
+  const end   = it.endAt   ?? it.endTime   ?? it.end   ?? it.to
+  const roomName  = it.room?.roomName || it.room?.name || it.roomName || it.title
+  const requester = it.requester || it.user || it.owner || it.requestBy || {}
+  const noteTakers = Array.isArray(it.noteTakers || it.notetakers || it.assignees) ? (it.noteTakers || it.notetakers || it.assignees) : []
+  const needNoteTaker = (it.needNoteTaker ?? it.requireNoteTaker ?? it.requiresNoteTaker)
+  return {
+    id: it.id,
+    title: it.title || roomName,
+    start, end,
+    status: String(it.status || '').toUpperCase() || 'PENDING',
+    room: it.room || { roomName },
+    requester,
+    noteTakers,
+    needNoteTaker: needNoteTaker !== false,
+    reportSent: !!it.reportSent
+  }
+}
+
+function statusTH(s){
+  const x = String(s||'').toUpperCase()
+  if (x==='IN_PROGRESS') return 'กำลังจด'
+  if (x==='DONE')        return 'เสร็จงาน'
+  return 'รอเริ่ม'
+}
+function badge(s){
+  const x = String(s||'').toUpperCase()
+  if (x==='IN_PROGRESS') return 'bg-green-100 text-green-700'
+  if (x==='DONE')        return 'bg-blue-100 text-blue-700'
+  return 'bg-amber-100 text-amber-800'
+}
+function dateTH(iso){ if(!iso) return '-'; const d=new Date(iso); const m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']; return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}` }
+function timeRange(s,e){ if(!s||!e) return '-'; const o={hour:'2-digit',minute:'2-digit'}; return `${new Date(s).toLocaleTimeString('th-TH',o)} - ${new Date(e).toLocaleTimeString('th-TH',o)}` }
+
+function canStart(status){ const x=String(status||'').toUpperCase(); return x!=='IN_PROGRESS' && x!=='DONE' }
+function canFinish(status){ return String(status||'').toUpperCase()==='IN_PROGRESS' }
+
+function view(m){ router.push(`/booking-info/${m.id}`) }
+
+/* ===== computed: filters ===== */
 const filtered = computed(() => {
   const kw = q.value.trim().toLowerCase()
-  if (!kw) return items.value
-  return items.value.filter(m =>
+  const todayStart = startOfDayTH()
+  const todayEnd   = endOfDayTH()
+  let list = items.value
+
+  if (todayOnly.value) {
+    list = list.filter(m => {
+      const s = new Date(m.start)
+      return s >= todayStart && s <= todayEnd
+    })
+  }
+
+  if (!kw) return list
+  return list.filter(m =>
     (m.room?.roomName||'').toLowerCase().includes(kw) ||
     (m.requester?.name||'').toLowerCase().includes(kw) ||
-    (m.noteTakers||[]).some(n => n.name?.toLowerCase().includes(kw))
+    (m.noteTakers||[]).some(n => (n.name||'').toLowerCase().includes(kw))
   )
 })
 
-function statusTH(s){ if(s==='IN_PROGRESS') return 'กำลังจด'; if(s==='DONE') return 'ส่งรายงานแล้ว'; return 'รอเริ่ม' }
-function badge(s){ if(s==='IN_PROGRESS') return 'bg-green-100 text-green-700'; if(s==='DONE') return 'bg-blue-100 text-blue-700'; return 'bg-amber-100 text-amber-800' }
-function dateTH(iso){ if(!iso) return '-' ; const d=new Date(iso); const m=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']; return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}` }
-function timeRange(s,e){ if(!s||!e) return '-'; const o={hour:'2-digit',minute:'2-digit'}; return `${new Date(s).toLocaleTimeString([],o)} - ${new Date(e).toLocaleTimeString([],o)}` }
-function canStart(m){ return m.status!=='DONE' && m.status!=='IN_PROGRESS' }
-function canReport(m){ return m.status==='IN_PROGRESS' }
+/* ===== summary counters ===== */
+function recount() {
+  const todayStart = startOfDayTH()
+  const todayEnd   = endOfDayTH()
+  const todayList  = items.value.filter(m => {
+    const s = new Date(m.start)
+    return s >= todayStart && s <= todayEnd
+  })
 
-function view(m){ router.push(`/booking-info/${m.id}`) }
-function start(m){ router.push({ path: '/note-taker/my-queue', query: { focusId: m.id, openForm: 1 } }) }
-function sendReport(m){ router.push({ path: '/note-taker/my-queue', query: { focusId: m.id, viewReport: 1 } }) }
+  // คำขอ: ต้องการคนจด และยังไม่มีผู้จด
+  requestsCount.value = todayList.filter(i =>
+    i.needNoteTaker !== false && (i.noteTakers?.length ?? 0) === 0
+  ).length
 
-onMounted(async () => {
+  const isDone = (m) => String(m.status).toUpperCase()==='DONE'
+  const isInProgress = (m) => String(m.status).toUpperCase()==='IN_PROGRESS'
+  const isPending = (m) => !isDone(m) && !isInProgress(m)
+
+  pendingCount.value = todayList.filter(isPending).length
+  doneCount.value    = todayList.filter(isDone).length
+}
+
+/* ===== API helpers: change status with fallbacks ===== */
+async function callWithFallback(fns) {
+  for (const fn of fns) {
+    try { const r = await fn(); if (r?.status>=200 && r?.status<300) return true } catch {}
+  }
+  return false
+}
+
+async function markInProgress(m) {
+  const id = m.id
+  const ok = await Swal.fire({
+    title: 'เริ่มจดประชุม?',
+    icon: 'question',
+    confirmButtonText: 'เริ่ม',
+    cancelButtonText: 'ยกเลิก',
+    showCancelButton: true,
+    confirmButtonColor: '#2563eb'
+  })
+  if (!ok.isConfirmed) return
+
+  const success = await callWithFallback([
+    () => api.patch(`/api/bookings/${id}/status`, { status: 'IN_PROGRESS' }),
+    () => api.post(`/api/bookings/${id}/start`),
+    () => api.post('/api/notetakers/start', { bookingId: id }),
+    () => api.post('/api/bookings/update-status', { id, status: 'IN_PROGRESS' }),
+  ])
+  if (!success) {
+    return Swal.fire({ icon:'error', title:'เริ่มไม่สำเร็จ', text:'ไม่พบ endpoint ที่ใช้งานได้' })
+  }
+
+  // update local
+  const idx = items.value.findIndex(x => x.id === id)
+  if (idx >= 0) items.value[idx] = { ...items.value[idx], status: 'IN_PROGRESS' }
+  recount()
+  Swal.fire({ icon:'success', title:'เริ่มจดแล้ว', timer:1200, showConfirmButton:false })
+}
+
+async function markDone(m) {
+  const id = m.id
+  const ok = await Swal.fire({
+    title: 'จบงาน?',
+    icon: 'question',
+    confirmButtonText: 'จบงาน',
+    cancelButtonText: 'ยกเลิก',
+    showCancelButton: true,
+    confirmButtonColor: '#059669'
+  })
+  if (!ok.isConfirmed) return
+
+  const success = await callWithFallback([
+    () => api.patch(`/api/bookings/${id}/status`, { status: 'DONE' }),
+    () => api.post(`/api/bookings/${id}/done`),
+    () => api.post('/api/notetakers/complete', { bookingId: id }),
+    () => api.post('/api/bookings/update-status', { id, status: 'DONE' }),
+  ])
+  if (!success) {
+    return Swal.fire({ icon:'error', title:'บันทึกไม่สำเร็จ', text:'ไม่พบ endpoint ที่ใช้งานได้' })
+  }
+
+  const idx = items.value.findIndex(x => x.id === id)
+  if (idx >= 0) items.value[idx] = { ...items.value[idx], status: 'DONE', reportSent: true }
+  recount()
+  Swal.fire({ icon:'success', title:'จบงานแล้ว', timer:1200, showConfirmButton:false })
+}
+
+/* ===== loader ===== */
+async function load() {
   loading.value = true
   fetchError.value = ''
-  try{
-    const res = await api.get('/api/bookings', { params: { sort:'nearest', page:1, pageSize:200 } })
-    const data = res.data
-    items.value = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
-    // counts (try to derive)
-    requestsCount.value = items.value.filter(i=>i.isRequest).length || 0
-    pendingCount.value = items.value.filter(i=>i.status==='PENDING' || !i.status).length || 0
-    doneCount.value = items.value.filter(i=>i.status==='DONE').length || 0
-    try { const u = await api.get('/api/me'); me.value = u.data || me.value } catch(_) {}
-  } catch(e){
-    console.error('fetch meetings failed', e)
-    fetchError.value = e?.response?.data?.error || e.message || 'fetch failed'
-  } finally { loading.value=false }
-})
+  try {
+    const from = startOfDayTH().toISOString().slice(0,10)
+    const toD  = new Date(); toD.setDate(toD.getDate()+14)
+    const to   = endOfDayTH(toD).toISOString().slice(0,10)
+
+    const trials = [
+      ['/api/bookings',              { params: { from, to, page:1, pageSize:400 } }],
+      ['/api/bookings',              { params: { dateFrom: from, dateTo: to, page:1, pageSize:400 } }],
+      ['/api/bookings/upcoming',     { params: { days: 14 } }],
+      ['/api/notetakers/assignments',{ params: { days: 14 } }],
+    ]
+
+    let res = null
+    for (const [url, opt] of trials) {
+      try { const r = await api.get(url, opt); if (r?.status === 200) { res = r; break } } catch {}
+    }
+    const raw  = res?.data?.items ?? res?.data ?? []
+    const list = (Array.isArray(raw) ? raw : []).map(mapItem).sort((a,b)=> new Date(a.start)-new Date(b.start))
+    items.value = list
+
+    recount()
+
+    try {
+      const u = await api.get('/api/me')
+      me.value = u.data || me.value
+    } catch (e) {
+      console.error('load dashboard failed', e)
+      fetchError.value = e?.response?.data?.error || e.message || 'fetch failed'
+      items.value = []
+      requestsCount.value = pendingCount.value = doneCount.value = 0
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
 </script>
 
 <style scoped>
 .modern-card { @apply bg-white rounded-2xl border border-gray-200 p-6; }
-.nav-link { @apply block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-100; }
-.nav-active { @apply bg-blue-50 text-blue-600; }
+.nav-link    { @apply block px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-100; }
+.nav-active  { @apply bg-blue-50 text-blue-600; }
 </style>

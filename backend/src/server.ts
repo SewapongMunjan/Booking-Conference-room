@@ -29,7 +29,7 @@ import reportRouter from "./routes/report";
 
 // ⬇️ ⬇️ ⬇️  เพิ่ม: router สำหรับ PDF
 import bookingsPdfRouter from "./routes/bookings.pdf";
-
+import statsRouter from "./routes/stats";
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
 
@@ -124,7 +124,7 @@ app.use("/api", meetings);
 
 // <-- ลงทะเบียน report router (routes defined with /api/issues ...)
 app.use(reportRouter);
-
+app.use("/api", statsRouter);
 // ====== 404 ======
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: "Not Found" });
