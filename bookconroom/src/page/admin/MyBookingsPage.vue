@@ -132,7 +132,15 @@
                   <td class="px-4 py-3">
                     <div class="flex justify-end gap-2">
                       <button class="px-3 py-1.5 rounded-lg border" @click="view(b)">รายละเอียด</button>
-                      <button class="px-3 py-1.5 rounded-lg bg-rose-600 text-white" v-if="canCancel(b)" @click="cancel(b)">ยกเลิก</button>
+                      <button
+                        class="px-3 py-1.5 rounded-lg bg-rose-600 text-white flex items-center gap-2"
+                        v-if="canCancel(b)"
+                        :disabled="isCancelling(b)"
+                        @click="cancel(b)"
+                      >
+                        <span v-if="isCancelling(b)">กำลังยกเลิก...</span>
+                        <span v-else>ยกเลิก</span>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -152,11 +160,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/lib/api.js'
+import Swal from 'sweetalert2'
 
 const router = useRouter()
 const items = ref([])
 const loading = ref(true)
 const q = ref('')
+const cancellingIds = ref([])
 
 function statusTH(s){ if(s==='APPROVED') return 'อนุมัติแล้ว'; if(s==='AWAITING_ADMIN_APPROVAL') return 'รออนุมัติ'; if(s==='CANCELLED') return 'ยกเลิกแล้ว'; return s||'-' }
 function badge(s){ if(s==='APPROVED') return 'bg-green-100 text-green-700'; if(s==='AWAITING_ADMIN_APPROVAL') return 'bg-amber-100 text-amber-800'; if(s==='CANCELLED') return 'bg-gray-200 text-gray-700'; return 'bg-gray-100 text-gray-700' }
@@ -164,6 +174,10 @@ function dateTH(iso){ const d=new Date(iso); const m=['ม.ค.','ก.พ.','ม
 function timeRange(s,e){ const o={hour:'2-digit',minute:'2-digit'}; return `${new Date(s).toLocaleTimeString([],o)} - ${new Date(e).toLocaleTimeString([],o)}` }
 function canCancel(b){ return b.status!=='CANCELLED' }
 function view(b){ router.push(`/booking-info/${b.id}`) }
+function isCancelling(bOrId){
+  const id = typeof bOrId === 'object' ? bOrId.id : bOrId
+  return cancellingIds.value.includes(id)
+}
 
 const filtered = computed(()=>{
   const kw = q.value.toLowerCase()
@@ -178,8 +192,29 @@ async function load(){
   } finally { loading.value = false }
 }
 async function cancel(b){
-  await api.post(`/api/bookings/${b.id}/cancel`)
-  await load()
+  // confirm
+  const res = await Swal.fire({
+    title: 'ยืนยันการยกเลิก',
+    text: `ต้องการยกเลิกการจองห้อง: ${b.room?.roomName || ''} หรือไม่?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'ยืนยัน',
+    cancelButtonText: 'ยกเลิก'
+  })
+  if (!res.isConfirmed) return
+
+  const id = b.id
+  cancellingIds.value = [...cancellingIds.value, id]
+  try {
+    await api.post(`/api/bookings/${id}/cancel`)
+    await load()
+    await Swal.fire({ icon: 'success', title: 'ยกเลิกสำเร็จ', timer: 1400, showConfirmButton: false })
+  } catch (err) {
+    console.error('cancel error', err)
+    await Swal.fire({ icon: 'error', title: 'ยกเลิกไม่สำเร็จ', text: err?.response?.data?.error || err?.message || 'เกิดข้อผิดพลาด' })
+  } finally {
+    cancellingIds.value = cancellingIds.value.filter(x => x !== id)
+  }
 }
 onMounted(load)
 </script>

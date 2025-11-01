@@ -889,4 +889,188 @@ router.get("/:id", auth, async (req: any, res) => {
   }
 });
 
+/** ====== UPDATE STATUS (PATCH /api/bookings/:id/status) ====== */
+router.patch("/:id/status", auth, async (req: any, res) => {
+  try {
+    const id = parseNumericIdParam(req, res)
+    if (id === null) return
+
+    const me = req.user!
+
+    // ยืดหยุ่น: อ่าน status จากหลายแหล่ง (body.status, body.desiredStatus, query.status)
+    const raw =
+      req.body?.status ??
+      req.body?.desiredStatus ??
+      req.body?.action ??
+      req.query?.status ??
+      ""
+    const wanted = String(raw).toUpperCase().trim()
+
+    // map case-insensitive -> actual enum value
+    const allowed = Object.values(BookingStatus)
+    const matched = allowed.find((s) => String(s).toUpperCase() === wanted)
+
+    if (!matched) {
+      return res.status(400).json({
+        error: "Invalid status",
+        provided: raw,
+        allowed: allowed,
+      })
+    }
+    const desired = matched as BookingStatus
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: {
+        room: true,
+        bookedBy: { select: { id: true } },
+        invites: { select: { userId: true } },
+        noteTakers: { select: { userId: true } },
+      },
+    })
+    if (!booking) return res.status(404).json({ error: "Booking not found" })
+
+    const meRow = await prisma.user.findUnique({
+      where: { id: me.sub },
+      select: { position: { select: { isAdmin: true } } },
+    })
+    const iAmAdmin = !!meRow?.position?.isAdmin
+
+    // permission rules
+    if (desired === BookingStatus.APPROVED && !iAmAdmin) {
+      return res.status(403).json({ error: "Forbidden" })
+    }
+    if (desired === BookingStatus.CANCELLED && booking.bookedById !== me.sub && !iAmAdmin) {
+      return res.status(403).json({ error: "Forbidden" })
+    }
+
+    // check conflict before approving
+    if (desired === BookingStatus.APPROVED) {
+      if (
+        await isRoomTimeBlocked(
+          booking.roomId,
+          booking.startTime,
+          booking.endTime,
+          booking.id
+        )
+      ) {
+        return res.status(409).json({ error: "Room time conflict at approval time" })
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const b = await tx.booking.update({
+        where: { id },
+        data: { status: desired },
+      })
+
+      // (existing notify/cascade logic for CANCELLED/APPROVED)
+      if (desired === BookingStatus.CANCELLED) {
+        await tx.bookingService.updateMany({
+          where: {
+            bookingId: id,
+            status: { in: [ServiceStatus.PENDING, ServiceStatus.IN_PROGRESS] },
+          },
+          data: { status: ServiceStatus.REJECTED },
+        })
+
+        const audience = Array.from(
+          new Set([
+            booking.bookedBy.id,
+            ...booking.invites.map((i) => i.userId),
+            ...booking.noteTakers.map((n) => n.userId),
+          ])
+        )
+
+        await notifyMany(tx, audience, {
+          type: NotifType.CANCELED,
+          title: "การประชุมถูกยกเลิก",
+          message: `การประชุมห้อง ${booking.room?.roomName ?? "-"} (${fmtRange(
+            booking.startTime,
+            booking.endTime
+          )}) ถูกยกเลิกแล้ว`,
+          refType: RefType.BOOKING,
+          refId: booking.id,
+        })
+      }
+
+      if (desired === BookingStatus.APPROVED) {
+        const title = "การจองได้รับการอนุมัติ"
+        const msg = `การประชุมห้อง ${booking.room?.roomName ?? "-"} (${booking.startTime.toLocaleString()}) ได้รับการอนุมัติแล้ว`
+
+        await tx.notification.create({
+          data: makeNotif({
+            userId: booking.bookedBy.id,
+            type: NotifType.APPROVED,
+            title,
+            message: msg,
+            refType: RefType.BOOKING,
+            refId: booking.id,
+          }),
+        })
+
+        const audience = [
+          ...booking.invites.map((i) => i.userId),
+          ...booking.noteTakers.map((n) => n.userId),
+        ]
+        if (audience.length) {
+          await tx.notification.createMany({
+            data: audience.map((uid) =>
+              makeNotif({
+                userId: uid,
+                type: NotifType.APPROVED,
+                title,
+                message: msg,
+                refType: RefType.BOOKING,
+                refId: booking.id,
+              })
+            ),
+            skipDuplicates: true,
+          })
+        }
+      }
+
+      return b
+    })
+
+    res.json({ booking: result })
+  } catch (e) {
+    console.error("Update booking status failed:", e)
+    res.status(500).json({ error: "Internal Server Error" })
+  }
+})
+
+/** ====== START (compat): POST /api/bookings/:id/start ====== */
+router.post("/:id/start", auth, async (req: any, res) => {
+  try {
+    const id = parseNumericIdParam(req, res);
+    if (id === null) return;
+
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+    // no-op / compatibility: frontend expects 200 when note taker starts
+    // หากต้องการเปลี่ยนสถานะจริง ให้อัปเดต booking.status ที่นี่
+    return res.json({ ok: true, bookingId: id });
+  } catch (err) {
+    console.error("POST /:id/start error:", err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+/** ====== DONE (compat): POST /api/bookings/:id/done ====== */
+router.post("/:id/done", auth, async (req: any, res) => {
+  try {
+    const id = parseNumericIdParam(req, res)
+    if (id === null) return
+
+    const booking = await prisma.booking.findUnique({ where: { id } })
+    if (!booking) return res.status(404).json({ error: "Booking not found" })
+
+    return res.json({ ok: true, booking })
+  } catch (err) {
+    console.error("POST /:id/done error:", err)
+    return res.status(500).json({ error: "Internal Server Error" })
+  }
+})
 export default router;
